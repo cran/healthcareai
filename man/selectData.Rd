@@ -4,15 +4,22 @@
 \alias{selectData}
 \title{Pull data into R via an ODBC connection}
 \usage{
-selectData(connectionString, query, randomize = FALSE)
+selectData(MSSQLConnectionString = NULL, query, SQLiteFileName = NULL,
+  randomize = FALSE, connectionString = NULL)
 }
 \arguments{
-\item{connectionString}{A string specifying the driver, server, database,
-and whether Windows Authentication will be used.}
+\item{MSSQLConnectionString}{A string specifying the driver, server, 
+database, and whether Windows Authentication will be used. Omit if using 
+SQLite.}
 
-\item{query}{The SQL query (in ticks or quotes)}
+\item{query}{The SQL query (in ticks or quotes).}
+
+\item{SQLiteFileName}{A string. If your database type is SQLite, here one 
+specifies the database file to query from.}
 
 \item{randomize}{Boolean that dictates whether returned rows are randomized}
+
+\item{connectionString}{DEPRECATED. Use MSSQLConnectionString}
 }
 \value{
 df A data frame containing the selected rows
@@ -24,7 +31,15 @@ a data frame.
 \examples{
 
 \donttest{
-#### This example is specific to Windows and is not tested. 
+# This example is specific to SQL Server
+
+# To instead pull data from Oracle see here 
+# https://cran.r-project.org/web/packages/ROracle/ROracle.pdf
+# To pull data from MySQL see here 
+# https://cran.r-project.org/web/packages/RMySQL/RMySQL.pdf
+# To pull data from Postgres see here 
+# https://cran.r-project.org/web/packages/RPostgreSQL/RPostgreSQL.pdf
+
 connectionString <- '
   driver={SQL Server};
   server=localhost;
@@ -41,6 +56,20 @@ query <- '
 df <- selectData(connectionString, query)
 head(df)
 }
+
+# SQLite example
+query <- '
+  SELECT *
+  FROM HCRDiabetesClinical
+  '
+# Loads sample database; replace with your own SQLite db file
+sqliteFile <- system.file("extdata",
+                          "unit-test.sqlite",
+                          package = "healthcareai")
+
+df <- selectData(query = query, 
+                 SQLiteFileName = sqliteFile)
+head(df)      
 }
 \references{
 \url{http://healthcare.ai}

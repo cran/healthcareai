@@ -16,9 +16,11 @@ debug)
 
 \item{df}{Dataframe whose columns are used for calc.}
 
-\item{grainCol}{The dataframe's column that has IDs pertaining to the grain}
+\item{grainCol}{Optional. The dataframe's column that has IDs pertaining to 
+the grain. No ID columns are truly needed for this step.}
 
-\item{predictedCol}{Column that you want to predict.}
+\item{predictedCol}{Column that you want to predict. If you're doing
+classification then this should be Y/N.}
 
 \item{impute}{Set all-column imputation to F or T.
 This uses mean replacement for numeric columns
@@ -79,7 +81,6 @@ df$PatientID <- NULL
 df$InTestWindowFLG <- NULL
 
 set.seed(42)
-
 p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
 p$type <- "classification"
@@ -98,8 +99,6 @@ set.seed(42)
 rf <- RandomForestDevelopment$new(p)
 rf$run()
 
-# For a given true-positive rate, get false-pos rate and 0/1 cutoff
-lasso$getCutOffs(tpr = 0.8)
 print(proc.time() - ptm)
 
 \donttest{
@@ -120,22 +119,17 @@ trusted_connection=true
 query <- "
 SELECT
 [PatientEncounterID]
-,[PatientID]
 ,[SystolicBPNBR]
 ,[LDLNBR]
 ,[A1CNBR]
 ,[GenderFLG]
 ,[ThirtyDayReadmitFLG]
-,[InTestWindowFLG]
 FROM [SAM].[dbo].[HCRDiabetesClinical]
 WHERE InTestWindowFLG = 'N'
 "
 
 df <- selectData(connection.string, query)
 head(df)
-
-df$PatientID <- NULL
-df$InTestWindowFLG <- NULL
 
 set.seed(42)
 
@@ -168,9 +162,6 @@ rocs <- list(rf$getPRCurve(), lasso$getPRCurve())
 names <- c("Random Forest", "Lasso")
 legendLoc <- "bottomleft"
 plotPRCurve(rocs, names, legendLoc)
-
-# For a given true-positive rate, get false-pos rate and 0/1 cutoff
-lasso$getCutOffs(tpr = 0.8)
 
 print(proc.time() - ptm)
 }

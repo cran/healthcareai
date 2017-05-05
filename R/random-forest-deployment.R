@@ -1,7 +1,3 @@
-# Import the common functions.
-source('R/common.R')
-source('R/supervised-model-deployment.R')
-
 #' Deploy a production-ready predictive RandomForest model
 #'
 #' @description This step allows one to
@@ -22,32 +18,74 @@ source('R/supervised-model-deployment.R')
 #' @param type The type of model (either 'regression' or 'classification')
 #' @param df Dataframe whose columns are used for calc.
 #' @param grainCol The dataframe's column that has IDs pertaining to the grain
-#' @param testWindowCol This column dictates the split between model training and
-#' test sets. Those rows with zeros in this column indicate the training set
-#' while those that have ones indicate the test set
-#' @param predictedCol Column that you want to predict.
+#' @param testWindowCol Y or N. This column dictates the split between model 
+#' training and test sets. Those rows with N in this column indicate the 
+#' training set while those that have Y indicate the test set
+#' @param predictedCol Column that you want to predict. If you're doing
+#' classification then this should be Y/N.
 #' @param impute For training df, set all-column imputation to F or T.
 #' This uses mean replacement for numeric columns
 #' and most frequent for factorized columns.
 #' F leads to removal of rows containing NULLs.
 #' @param debug Provides the user extended output to the console, in order
 #' to monitor the calculations throughout. Use T or F.
+#' @export
 #' @seealso \code{\link{healthcareai}}
 #' @examples
 #' 
+#' #### Example using csv data ####
+#' ptm <- proc.time()
+#' library(healthcareai)
+#'
+#' # setwd('C:/Yourscriptlocation/Useforwardslashes') # Uncomment if using csv
+#' 
+#' # Can delete this line in your work
+#' csvfile <- system.file("extdata", 
+#'                        "HCRDiabetesClinical.csv", 
+#'                        package = "healthcareai")
+#'
+#' # Replace csvfile with 'path/file'
+#' df <- read.csv(file = csvfile, 
+#'                header = TRUE, 
+#'                na.strings = c("NULL", "NA", ""))
+#'
+#' head(df)
+#'
+#' # Remove unnecessary columns
+#' df$PatientID <- NULL
+#'
+#' p <- SupervisedModelDeploymentParams$new()
+#' p$type <- "classification"
+#' p$df <- df
+#' p$grainCol <- "PatientEncounterID"
+#' p$testWindowCol <- "InTestWindowFLG"
+#' p$predictedCol <- "ThirtyDayReadmitFLG"
+#' p$impute <- TRUE
+#' p$debug <- FALSE
+#' p$useSavedModel <- FALSE
+#' p$cores <- 1
+#' p$writeToDB <- FALSE
+#'
+#' dL <- RandomForestDeployment$new(p)
+#' dL$deploy()
+#' 
+#' df <- dL$getOutDf()
+#' # Write to CSV (or JSON, MySQL, etc) using R syntax
+#' # write.csv(df,'path/predictionsfile.csv')
+#' 
+#' print(proc.time() - ptm)
+#' 
 #' \donttest{
-#' #### This example is specific to Windows and is not tested. 
-#' #### Classification example using diabetes data ####
-#' # This example requires you to first create a table in SQL Server
+#' 
+#' #### Classification example using SQL Server data ####
+#' # If pushing predictions to SQL Server, first create a table
 #' # If you prefer to not use SAMD, execute this in SSMS to create output table:
-#' # CREATE TABLE dbo.HCRDeployRegressionBASE(
+#' # CREATE TABLE dbo.HCRDeployClassificationBASE(
 #' #   BindingID float, BindingNM varchar(255), LastLoadDTS datetime2,
 #' #   PatientEncounterID int, <--change to match inputID
 #' #   PredictedProbNBR decimal(38, 2),
 #' #   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
 #' # )
-#'
-#' #setwd('C:/Yourscriptlocation/Useforwardslashes') # Uncomment if using csv
 #' ptm <- proc.time()
 #' library(healthcareai)
 #'
@@ -74,9 +112,7 @@ source('R/supervised-model-deployment.R')
 #' df <- selectData(connection.string, query)
 #'
 #' head(df)
-#'
-#' # Remove unnecessary columns
-#' df$SomeColumn <- NULL
+#' str(df)
 #'
 #' p <- SupervisedModelDeploymentParams$new()
 #' p$type <- "classification"
@@ -96,7 +132,64 @@ source('R/supervised-model-deployment.R')
 #'
 #' print(proc.time() - ptm)
 #' }
-#' @export
+#' 
+#' \donttest{
+#' 
+#' #### Regression example using SQL Server data ####
+#' # If pushing predictions to SQL Server, first create a table
+#' # If you prefer to not use SAMD, execute this in SSMS to create output table:
+#' # CREATE TABLE dbo.HCRDeployRegressionBASE(
+#' #   BindingID float, BindingNM varchar(255), LastLoadDTS datetime2,
+#' #   PatientEncounterID int, <--change to match inputID
+#' #   PredictedValueNBR decimal(38, 2),
+#' #   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
+#' # )
+#' ptm <- proc.time()
+#' library(healthcareai)
+#'
+#' connection.string <- "
+#' driver={SQL Server};
+#' server=localhost;
+#' database=SAM;
+#' trusted_connection=true
+#' "
+#'
+#' query <- "
+#' SELECT
+#'  [PatientEncounterID] --Only need one ID column for random forest
+#' ,[SystolicBPNBR]
+#' ,[LDLNBR]
+#' ,[A1CNBR]
+#' ,[GenderFLG]
+#' ,[ThirtyDayReadmitFLG]
+#' ,[InTestWindowFLG]
+#' FROM [SAM].[dbo].[HCRDiabetesClinical]
+#' --no WHERE clause, because we want train AND test
+#' "
+#'
+#' df <- selectData(connection.string, query)
+#'
+#' head(df)
+#' str(df)
+#'
+#' p <- SupervisedModelDeploymentParams$new()
+#' p$type <- "regression"
+#' p$df <- df
+#' p$grainCol <- "PatientEncounterID"
+#' p$testWindowCol <- "InTestWindowFLG"
+#' p$predictedCol <- "A1CNBR"
+#' p$impute <- TRUE
+#' p$debug <- FALSE
+#' p$useSavedModel <- FALSE
+#' p$cores <- 1
+#' p$sqlConn <- connection.string
+#' p$destSchemaTable <- "dbo.HCRDeployRegressionBASE"
+#'
+#' dL <- RandomForestDeployment$new(p)
+#' dL$deploy()
+#'
+#' print(proc.time() - ptm)
+#' }
 
 RandomForestDeployment <- R6Class("RandomForestDeployment",
   #Inheritance
@@ -106,16 +199,20 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
   private = list(
 
     # variables
-    coefficients = NULL,
-    multiplyRes = NULL,
-    orderedFactors = NULL,
-    predictedValsForUnitTest = NULL,
+    coefficients = NA,
+    multiplyRes = NA,
+    orderedFactors = NA,
+    predictedValsForUnitTest = NA,
+    outDf = NA,
 
     # functions
     connectDataSource = function() {
       odbcCloseAll()
-      # Convert the connection string into a real connection object.
-      self$params$sqlConn <- odbcDriverConnect(self$params$sqlConn)
+      
+      if (isTRUE(self$params$writeToDB)) {
+        # Convert the connection string into a real connection object.
+        self$params$sqlConn <- odbcDriverConnect(self$params$sqlConn)
+      }
     },
 
     closeDataSource = function() {
@@ -189,7 +286,7 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
 
       } else if (self$params$type == 'regression') {
         # this is in-kind prediction
-        predictedValsTemp <- predict(private$fit, data = self$dfTest)
+        predictedValsTemp <- predict(private$fit, data = private$dfTest)
         private$predictedVals <- predictedValsTemp$predictions
 
         if (isTRUE(self$params$debug)) {
@@ -250,16 +347,16 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
     },
 
     saveDataIntoDb = function() {
-      dtStamp <- as.POSIXlt(Sys.time(), "GMT")
+      dtStamp <- as.POSIXlt(Sys.time())
 
       # Combine grain.col, prediction, and time to be put back into SAM table
-      outDf <- data.frame(
+      private$outDf <- data.frame(
         0,                                 # BindingID
         'R',                               # BindingNM
         dtStamp,                           # LastLoadDTS
         private$grainTest,                 # GrainID
         private$predictedVals,             # PredictedProbab
-        private$orderedFactors[, 1:3])    # Top 3 Factors
+        private$orderedFactors[, 1:3])     # Top 3 Factors
 
       predictedResultsName = ""
       if (self$params$type == 'classification') {
@@ -267,7 +364,7 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
       } else if (self$params$type == 'regression') {
         predictedResultsName = "PredictedValueNBR"
       }
-      colnames(outDf) <- c(
+      colnames(private$outDf) <- c(
         "BindingID",
         "BindingNM",
         "LastLoadDTS",
@@ -279,26 +376,28 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
       )
 
       if (isTRUE(self$params$debug)) {
-        print('Dataframe going to SQL Server:')
-        print(str(outDf))
+        print('Dataframe with predictions:')
+        print(str(private$outDf))
       }
-
-      # Save df to table in SAM database
-      out <- sqlSave(
-        channel = self$params$sqlConn,
-        dat = outDf,
-        tablename = self$params$destSchemaTable,
-        append = T,
-        rownames = F,
-        colnames = F,
-        safer = T,
-        nastring = NULL,
-        verbose = self$params$debug
-      )
-
-      # Print success if insert was successful
-      if (out == 1) {
-        print('SQL Server insert was successful')
+      
+      if (isTRUE(self$params$writeToDB)) {
+        # Save df to table in SAM database
+        out <- sqlSave(
+          channel = self$params$sqlConn,
+          dat = private$outDf,
+          tablename = self$params$destSchemaTable,
+          append = T,
+          rownames = F,
+          colnames = F,
+          safer = T,
+          nastring = NULL,
+          verbose = self$params$debug
+        )
+  
+        # Print success if insert was successful
+        if (out == 1) {
+          print('SQL Server insert was successful')
+        }
       }
     }
   ),
@@ -428,9 +527,14 @@ RandomForestDeployment <- R6Class("RandomForestDeployment",
       private$closeDataSource()
     },
 
-    #Get predicted values
+    # Get predicted values
     getPredictedValsForUnitTest = function() {
       return(private$predictedValsForUnitTest)
+    },
+    
+    # Surface outDf as attribute for export to Oracle, MySQL, etc
+    getOutDf = function() {
+      return(private$outDf)
     }
   )
 )

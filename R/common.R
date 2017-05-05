@@ -204,20 +204,31 @@ removeRowsWithNAInSpecCol <- function(df, desiredCol) {
 #' Pull data into R via an ODBC connection
 #' @description Select data from an ODBC database and return the results as
 #' a data frame.
-#' @param connectionString A string specifying the driver, server, database,
-#' and whether Windows Authentication will be used.
-#' @param query The SQL query (in ticks or quotes)
+#' @param MSSQLConnectionString A string specifying the driver, server, 
+#' database, and whether Windows Authentication will be used. Omit if using 
+#' SQLite.
+#' @param query The SQL query (in ticks or quotes).
+#' @param SQLiteFileName A string. If your database type is SQLite, here one 
+#' specifies the database file to query from.
 #' @param randomize Boolean that dictates whether returned rows are randomized
+#' @param connectionString DEPRECATED. Use MSSQLConnectionString
 #' @return df A data frame containing the selected rows
 #'
-#' @import RODBC
 #' @export
 #' @references \url{http://healthcare.ai}
 #' @seealso \code{\link{healthcareai}}
 #' @examples
 #' 
 #' \donttest{
-#' #### This example is specific to Windows and is not tested. 
+#' # This example is specific to SQL Server
+#' 
+#' # To instead pull data from Oracle see here 
+#' # https://cran.r-project.org/web/packages/ROracle/ROracle.pdf
+#' # To pull data from MySQL see here 
+#' # https://cran.r-project.org/web/packages/RMySQL/RMySQL.pdf
+#' # To pull data from Postgres see here 
+#' # https://cran.r-project.org/web/packages/RPostgreSQL/RPostgreSQL.pdf
+#' 
 #' connectionString <- '
 #'   driver={SQL Server};
 #'   server=localhost;
@@ -234,26 +245,62 @@ removeRowsWithNAInSpecCol <- function(df, desiredCol) {
 #' df <- selectData(connectionString, query)
 #' head(df)
 #' }
+#' 
+#' # SQLite example
+#' query <- '
+#'   SELECT *
+#'   FROM HCRDiabetesClinical
+#'   '
+#' # Loads sample database; replace with your own SQLite db file
+#' sqliteFile <- system.file("extdata",
+#'                           "unit-test.sqlite",
+#'                           package = "healthcareai")
+#' 
+#' df <- selectData(query = query, 
+#'                  SQLiteFileName = sqliteFile)
+#' head(df)      
 
-selectData <- function(connectionString, query, randomize = FALSE) {
+selectData <- function(MSSQLConnectionString = NULL, 
+                       query, 
+                       SQLiteFileName = NULL,
+                       randomize = FALSE,
+                       connectionString = NULL) {
+  
+  if (!is.null(connectionString)) {
+    stop('The connectionString argument has been deprecated. ',
+            'Please use MSSQLConnectionString instead.')
+  }
+  
+  if ((is.null(MSSQLConnectionString)) && (is.null(SQLiteFileName))) {
+    stop('You must specify a either a MSSQLConnectionString for ',
+         'SQL Server or a SQLiteFileName for SQLite')
+  }
+  
   if (isTRUE(randomize)) {
     orderPres <- grep("order", tolower(query))
 
     if (length(orderPres == 0)) {
       stop("You cannot randomize while using the SQL order keyword.")
     }
-
     query <- paste0(query, " ORDER BY NEWID()")
   }
 
-  # TODO: if debug: cat(connectionString)
-  cnxn <- odbcDriverConnect(connectionString)
+  # TODO: if debug: time this operation and print time spent to pull data.
+  if (!is.null(MSSQLConnectionString)) {
+    con <- DBI::dbConnect(odbc::odbc(),
+                          .connection_string = MSSQLConnectionString)
+  } else if (!is.null(SQLiteFileName)) {
+    con <- DBI::dbConnect(RSQLite::SQLite(), dbname = SQLiteFileName)
+  }
+  
+  tryCatch(df <- DBI::dbGetQuery(con, query),
+    error = function(e) {
+    e$message <- "Your SQL likely contains an error."
+    stop(e)
+  })
 
-  # TODO: if debug: cat(query) TODO: if debug: time this operation and print the
-  # time spent to pull data.
-  df <- sqlQuery(channel = cnxn, na.strings = c("NULL", "NA", ""), query = query)
-
-  odbcCloseAll()
+  # Close connection
+  DBI::dbDisconnect(con)
 
   # Make sure there are enough rows to actually do something useful.
   if (is.null(nrow(df))) {
@@ -261,64 +308,88 @@ selectData <- function(connectionString, query, randomize = FALSE) {
     stop("Your SQL contains an error.")
   }
   if (nrow(df) == 0) {
-    cat("Too few rows returned from SQL: ")
-    cat(nrow(df))
-    cat(" rows returned.")
-    cat("Adjust your query to return more data!")
+    warning("Zero rows returned from SQL. ",
+            "Adjust your query to return more data!")
   }
-  # TODO: if debug: print the number of rows selected.
   df  # Return the selected data.
 }
 
 
 #' @title
 #' Write data to database
-#' @description Write data frame to database via ODBC connection
-#' @param df A data frame being written to a database
-#' @param server A string.
-#' @param database A string.
-#' @param schemaDotTable A string representing the destination schema and
-#' table. Note that brackets aren't expected.
+#' @description Write data frame to database table via ODBC connection
+#' #' @param connectionString A string specifying the driver, server, database,
+#' and whether Windows Authentication will be used.
+#' @param MSSQLConnectionString A string specifying the driver, server, 
+#' database, and whether Windows Authentication will be used.
+#' @param df Dataframe that hold the tabular data
+#' @param SQLiteFileName A string. If dbtype is SQLite, here one specifies the 
+#' database file to query from
+#' @param tableName String. Name of the table that receives the new rows
 #' @return Nothing
 #'
-#' @import RODBC
 #' @export
 #' @references \url{http://healthcare.ai}
 #' @seealso \code{\link{healthcareai}}
 #' @examples
 #' 
 #' \donttest{
-#' #### This example is specific to Windows and is not tested. 
+#' # This example is specific to SQL Server.
+#' 
+#' # To instead pull data from Oracle see here 
+#' # https://cran.r-project.org/web/packages/ROracle/ROracle.pdf
+#' # To pull data from MySQL see here 
+#' # https://cran.r-project.org/web/packages/RMySQL/RMySQL.pdf
+#' # To pull data from Postgres see here 
+#' # https://cran.r-project.org/web/packages/RPostgreSQL/RPostgreSQL.pdf 
+#'
+#' # Before running this example, create the table in SQL Server via
+#' # CREATE TABLE [dbo].[HCRWriteData](
+#' # [a] [float] NULL,
+#' # [b] [float] NULL,
+#' # [c] [varchar](255) NULL)
+#' 
+#' connectionString <- '
+#'   driver={SQL Server};
+#'   server=localhost;
+#'   database=SAM;
+#'   trustedConnection=true
+#'   '
+#'
 #' df <- data.frame(a=c(1,2,3),
 #'                  b=c(2,4,6),
 #'                  c=c('one','two','three'))
 #'
-#' writeData(df,'localhost','SAM','dbo.HCRWriteData')
+#' writeData(MSSQLConnectionString = connectionString, 
+#'           df = df, 
+#'           tableName = 'HCRWriteData')
 #' }
 
-writeData <- function(df, server, database, schemaDotTable) {
-  # TODO: use sub function to remove brackets from schemaDotTable TODO: add
-  # try/catch around sqlSave
-  connectionString <- paste0("driver={SQL Server};
-                             server=",
-                             server, ";
-                             database=", database, ";
-                             trustedConnection=true")
-
-  sqlCnxn <- odbcDriverConnect(connectionString)
-
-  # Save df to table in specified database
-  out <- sqlSave(channel = sqlCnxn, dat = df, tablename = schemaDotTable, append = T,
-                 rownames = F, colnames = F, safer = T, nastring = NULL)
-
-  # Clean up.
-  odbcCloseAll()
-
-  if (out == 1) {
-    print("SQL Server insert was successful")
-  } else {
-    print("SQL Server insert failed")
+writeData <- function(MSSQLConnectionString = NULL, 
+                      df, 
+                      SQLiteFileName = NULL,
+                      tableName) {
+  
+  # TODO: add try/catch around sqlSave
+  
+  # TODO: if debug: time this operation and print time spent to pull data.
+  if ((is.null(MSSQLConnectionString)) && (is.null(SQLiteFileName))) {
+    stop('You must specify a either a MSSQLConnectionString for SQL Server or a SQLiteFileName for SQLite')
   }
+
+  if (!is.null(MSSQLConnectionString)) {
+    con <- DBI::dbConnect(odbc::odbc(),
+                          .connection_string = MSSQLConnectionString)
+  } else if (!is.null(SQLiteFileName)) {
+    con <- DBI::dbConnect(RSQLite::SQLite(), dbname = SQLiteFileName)
+  }
+
+  DBI::dbWriteTable(con, tableName, df, append = TRUE)
+  
+  # Close connection
+  DBI::dbDisconnect(con)
+
+  cat(nrow(df), "rows were inserted into the SQL Server", tableName, "table." )
 }
 
 #' @title
@@ -344,7 +415,7 @@ writeData <- function(df, server, database, schemaDotTable) {
 removeColsWithAllSameValue <- function(df) {
   dfResult <- df[sapply(df, function(x) length(unique(x[!is.na(x)])) > 1)]
   if (ncol(dfResult) == 0) {
-    message("All columns were removed.")
+    cat("All columns were removed.")
   }
   dfResult
 }
@@ -435,7 +506,7 @@ findTrends <- function(df, dateCol, groupbyCol) {
   }
 
   if (length(metricTrendList) == 0) {
-    message("No trends of sufficient length found")
+    cat("No trends of sufficient length found")
     return()
   } else {
     dfResult <- data.frame(groupbyCol, aggregatedColList, metricTrendList, finalYrMonth)
@@ -454,7 +525,6 @@ findTrends <- function(df, dateCol, groupbyCol) {
 #' @param descending Boolean for whether the output should be in descending order
 #' @return A data frame ordered by date column
 #'
-#' @importFrom lubridate ymd_hms
 #' @export
 #' @references \url{http://healthcare.ai}
 #' @seealso \code{\link{healthcareai}}
@@ -465,12 +535,12 @@ findTrends <- function(df, dateCol, groupbyCol) {
 #' head(dfResult)
 
 orderByDate <- function(df, dateCol, descending = FALSE) {
-  df[[dateCol]] <- lubridate::ymd_hms(df[[dateCol]], truncated = 5)
-
+  df[[dateCol]] <- as.POSIXct(df[[dateCol]], truncated = 5)
+  # Drop equals FALSE so that one column data frames are not converted to arrays
   if (descending == FALSE) {
-    dfResult <- df[order(df[[dateCol]]), ]
+    dfResult <- df[order(df[[dateCol]]), , drop = FALSE]
   } else {
-    dfResult <- df[rev(order(df[[dateCol]])), ]
+    dfResult <- df[rev(order(df[[dateCol]])), , drop = FALSE]
   }
   dfResult
 }
@@ -576,11 +646,13 @@ calculateAllCorrelations <- function(df) {
 #' @examples
 #' df <- data.frame(a=c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
 #'                     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1),
-#'                 b=c('a','b','c','d','e','f','g','h','i','j','k','l','m','n',
-#'                     'o','p','q','r','s','t','u','v','w','x','y','z','aa','bb',
-#'                     'cc','dd','ee','ff','gg','hh','ii','jj','kk','ll','mm','nn',
-#'                     'oo','pp','qq','rr','ss','tt','uu','vv','ww','xx','yy'))
+#'                  b=c('a','b','c','d','e','f','g','h','i','j','k','l','m','n',
+#'                      'o','p','q','r','s','t','u','v','w','x','y','z','aa',
+#'                      'bb','cc','dd','ee','ff','gg','hh','ii','jj','kk','ll',
+#'                      'mm','nn','oo','pp','qq','rr','ss','tt','uu','vv','ww',
+#'                      'xx','yy'))
 #' colList <- returnColsWithMoreThanFiftyCategories(df)
+#' colList
 
 returnColsWithMoreThanFiftyCategories <- function(df) {
   colList <- vector("character")
@@ -593,7 +665,7 @@ returnColsWithMoreThanFiftyCategories <- function(df) {
 }
 
 #' @title
-#' Calculates percentage of each column in df that is NULL (NA)
+#' DEPRECATED. Calculates percentage of each column in df that is NULL (NA)
 #'
 #' @description Returns a vector with percentage of each column that is NULL
 #' in the original data frame
@@ -611,6 +683,9 @@ returnColsWithMoreThanFiftyCategories <- function(df) {
 #' colList
 
 countPercentEmpty <- function(df) {
+  warning(paste0('This function has been deprecated and will be removed',
+                 ' after v0.1.12.\n',
+                 'Please instead see ?percentDataAvailableInDateRange.'))
   colList <- colMeans(is.na(df))
   colList
 }
@@ -854,6 +929,92 @@ calculateSDChanges <- function(dfOriginal,
 }
 
 #' @title
+#' Find the percent of a column that's filled
+#'
+#' @description
+#' Shows what percentage of data is avilable (potentially within a specified 
+#' date range)
+#'
+#' @param df A dataframe
+#' @param dateColumn Optional string representing a date column of interest
+#' @param startInclusive Optional string in the in this date style: 'YYYY-MM-DD'
+#' @param endExclusive Optional string in the in this date style: 'YYYY-MM-DD'
+#' @return A labeled numeric vector, representing each column in input df
+#'
+#' @export
+#' @references \url{http://healthcare.ai}
+#' @seealso \code{\link{healthcareai}}
+#' @examples 
+#' df <- data.frame(a = c(1,2,NA,NA),
+#'                  b = c('m','f','m','f'),
+#'                  c = c(0.7,NA,2.4,-4),
+#'                  d = c(100,300,200,NA),
+#'                  e = c(400,500,NA,504),
+#'                  datecol = c('2012-01-01','2012-01-02',
+#'                              '2012-01-03','2012-01-07'))
+#' 
+#' out <- percentDataAvailableInDateRange(df = df, # <- Only required argument
+#'                                        dateColumn = 'datecol',
+#'                                        startInclusive = '2012-01-01',
+#'                                        endExclusive = '2012-01-08')
+#' out
+
+percentDataAvailableInDateRange = function(df,
+                                           dateColumn=NULL,
+                                           startInclusive=NULL,
+                                           endExclusive=NULL) {
+
+  # Error handling
+  if (missing(df)) {
+    stop('Please specify a dataframe')
+  }
+  
+  # TODO: Simplify this error logic ground the three date cols
+  if ((missing(dateColumn)) &
+      ((!missing(startInclusive)) |
+       (!missing(endExclusive)))) {
+    stop('If any, specify dateColumn, startInclusive, AND endExclusive')
+  }
+  
+  if ((missing(startInclusive)) &
+      ((!missing(endExclusive)) |
+       (!missing(dateColumn)))) {
+    stop('If any, specify dateColumn, startInclusive, AND endExclusive')
+  }
+  
+  if ((missing(endExclusive)) &
+      ((!missing(startInclusive)) |
+       (!missing(dateColumn)))) {
+    stop('If any, specify dateColumn, startInclusive, AND endExclusive')
+  }
+
+  # If specified, check if date col exists in dataframe
+  if ((!missing(dateColumn)) && (!dateColumn %in% names(df))) {
+    stop(dateColumn, ' is not a column in your dataframe')
+  }
+  
+  # If one gets past error checking, and specified a dateColumn, subset data
+  if (!missing(dateColumn)) {
+    tryCatch( # Test this try catch and create unit test!!
+      reduced <- df[(as.Date(df[[dateColumn]]) >= as.Date(startInclusive) &
+                     as.Date(df[[dateColumn]]) < as.Date(endExclusive)),],
+      error = function(e) {
+      e$message <- paste0("The dateColumn, startInclusive, and endExclusive ",
+                          "columns need dates to be in YYYY-MM-DD format\n", e)
+      stop(e)
+    })
+  } else {
+    reduced = df
+  }
+  
+  reduced <- reduced[, !(names(reduced) %in% dateColumn)]
+  
+  percentFilled <- colMeans(!is.na(reduced)) * 100
+  
+  return(percentFilled)
+}
+
+#' @title
 #' Recalculate predicted value based on alternate scenarios
 #'
 #' @description After getting alternate features via calculateSDChanges
@@ -1030,7 +1191,7 @@ findBestAlternateScenarios <- function(dfAlternateFeat,
 }
 
 #' @title
-#' Generate ROC curve for a dataset.
+#' Generate ROC or PR curve for a dataset.
 #' @description Generates ROC curve and AUC for Sensitivity/Specificity or 
 #' Precision/Recall.
 #' @param predictions A vector of predictions from a machine learning model.
@@ -1038,8 +1199,12 @@ findBestAlternateScenarios <- function(dfAlternateFeat,
 #' predictions.
 #' @param aucType A string. Indicates AUC_ROC or AU_PR and can be "SS" or "PR". 
 #' Defaults to SS.
-#' @param plotFlg Binary value controlling plots Defaults to FALSE (no).
-#' @return auc A number between 0 and 1. Integral AUC of chosen plot type.
+#' @param plotFlg Binary value controlling plots. Defaults to FALSE (no).
+#' @param allCutoffsFlg Binary value controlling list of all thresholds. 
+#' Defaults to FALSE (no).
+#' @return AUC: A number between 0 and 1. Integral AUC of chosen plot type.
+#' @return IdealCutoffs: Array of cutoff and associated TPR/FPR or pre/rec.
+#' @return Performance: ROCR performance class containing all ROC information.
 #'
 #' @import ROCR
 #' @export
@@ -1058,9 +1223,18 @@ findBestAlternateScenarios <- function(dfAlternateFeat,
 #' labels <- df[,'b']
 #' 
 #' # generate the AUC
-#' auc = generateAUC(pred,labels,'SS','TRUE')
+#' auc = generateAUC(predictions = pred, 
+#'                   labels = labels,
+#'                   aucType = 'SS',
+#'                   plotFlg = TRUE,
+#'                   allCutoffsFlg = TRUE)
 #' 
-generateAUC <- function(predictions, labels, aucType='SS', plotFlg=FALSE) {
+generateAUC <- function(predictions, 
+                        labels, 
+                        aucType='SS', 
+                        plotFlg=FALSE, 
+                        allCutoffsFlg=FALSE) {
+  
   # Error check for uneven length predictions and labels
   if (length(predictions) != length(labels)) {
     stop('Data vectors are not equal length!')
@@ -1075,13 +1249,11 @@ generateAUC <- function(predictions, labels, aucType='SS', plotFlg=FALSE) {
   }
   
   # generate ROC data
-  # TODO: standardize on :: vs ImportFrom (in header)
-  roc1 <- ROCR::prediction(predictions, labels)
+  pred = ROCR::prediction(predictions, labels)
   
   # get performance and AUC from either curve type
-  # PR
   if (aucType == 'PR') {
-    perf <- ROCR::performance(roc1, "prec", "rec")
+    perf <- ROCR::performance(pred, "prec", "rec")
     x <- as.numeric(unlist(perf@x.values))
     y <- as.numeric(unlist(perf@y.values))
     
@@ -1089,28 +1261,34 @@ generateAUC <- function(predictions, labels, aucType='SS', plotFlg=FALSE) {
     y[ is.nan(y) ] <- 0
     # From: http://stackoverflow.com/a/30280873/5636012
     area <- sum(diff(x) * (head(y,-1) + tail(y,-1)))/2
-  }
-  # SS
-  else if (aucType == 'SS') {
-    perf <- ROCR::performance(roc1, "tpr","fpr")
-    perf.auc <- ROCR::performance(roc1, measure = "auc")
+    
+    # print threshholds and AUC
+    cat(sprintf("Area under the PR curve is: %0.2f \n", area))
+
+  } else if (aucType == 'SS') {
+    perf <- ROCR::performance(pred, "tpr","fpr")
+    perf.auc <- ROCR::performance(pred, measure = "auc")
     area <- perf.auc@y.values[[1]]
+    
+    # print AUC
+    cat(sprintf("Area under the ROC curve is: %0.2f \n", area)) 
   }
   
   if (aucType == 'SS') {
     titleTemp <- 'ROC'
     xtitle <- 'False Positive Rate'
     ytitle <- 'True Positive Rate'
-  } else if (aucType == 'PR') {
+  } else {
     titleTemp <- 'PR Curve'
     xtitle <- 'Recall'
     ytitle <- 'Precision'
   }
   
   # plot AUC 
-  if (plotFlg == TRUE){
+  if (isTRUE(plotFlg)) {
     plot(x = perf@x.values[[1]],
          y = perf@y.values[[1]],
+         type = 'l',
          col = "blue", 
          lwd = 2, 
          main = titleTemp,
@@ -1118,8 +1296,12 @@ generateAUC <- function(predictions, labels, aucType='SS', plotFlg=FALSE) {
          ylab = ytitle)
   }
   
-  # return AUC
-  area
+  # get ideal cutoff values.
+  IdealCuts <- getCutOffList(perf = perf, 
+                          aucType = aucType, 
+                          allCutoffsFlg = allCutoffsFlg)
+  
+  return(list('AUC' = area, 'IdealCutoffs' = IdealCuts, 'Performance' = perf))
 }
 
 #' @title
@@ -1154,22 +1336,22 @@ calculatePerformance <- function(predictions, ytest, type) {
   if (type == 'classification') {
 
     # Performance curves for return and plotting
-    predROCR <- ROCR::prediction(predictions, ytest)
-    ROCPlot <- ROCR::performance(predROCR, "tpr", "fpr")
-    PRCurvePlot <- ROCR::performance(predROCR, "prec", "rec")
+    myOutput <- generateAUC(predictions, ytest, 'SS')
+    AUROC = myOutput[[1]]
+    ROCPlot = myOutput[[3]]
+    ROCConf <- pROC::roc(ytest~predictions) # need pROC for 95% confidence
+    conf <- pROC::auc(ROCConf) 
+    cat(sprintf('95%% CI AU_ROC: (%0.2f , %0.2f) \n', ci(conf)[1], ci(conf)[3]))
+    cat(sprintf('\n'))
     
     # Performance AUC calcs (AUPR is ROCR-based)
-    AUPR <- generateAUC(predictions, ytest, 'PR', 'FALSE')
+    myOutput <- generateAUC(predictions, ytest, 'PR')
+    AUPR = myOutput[[1]]
+    PRCurvePlot = myOutput[[3]]
     ROCConf <- pROC::roc(ytest~predictions) # need pROC for 95% confidence
-    AUROC <- pROC::auc(ROCConf)                  
+    AUROC <- pROC::auc(ROCConf)   
+    cat(sprintf('\n')) 
     
-    # Show results
-    print(paste0('AU_ROC: ', round(AUROC, 2)))
-    print(paste0('95% CI AU_ROC: (', round(ci(AUROC)[1],2),
-                 ',',
-                 round(ci(AUROC)[3],2), ')'))
-    print(paste0('AU_PR: ', round(AUPR, 2)))
-
   } else if (type == 'regression') {
     
     RMSE <- sqrt(mean((ytest - predictions) ^ 2))
@@ -1204,4 +1386,60 @@ initializeParamsForTesting <- function(df) {
   p$tune = FALSE
   p$numberOfTrees = 201
   return(p)
+}
+
+
+#' @title
+#' Function to return ideal cutoff and TPR/FPR or precision/recall.
+#'
+#' @description Calculates ideal cutoff by proximity to corner of the ROC curve.
+#' Usually called from \code{\link{generateAUC}}
+#' @param perf An ROCR performance class. (Usually made by generateAUC)
+#' @param aucType A string. Indicates AUC_ROC or AU_PR and can be "SS" or "PR". 
+#' Defaults to SS.
+#' @param allCutoffsFlg Binary value controlling list of all thresholds. 
+#' @return Array of ideal cutoff and associated TPR/FPR or pre/rec.
+#' 
+#' @export
+#' @references \url{http://healthcare.ai}
+#' @seealso \code{\link{healthcareai}}
+
+getCutOffList = function(perf, aucType = 'SS', allCutoffsFlg = FALSE) {
+  ## TODO: Give user the ability to give higher weight to recall or FPR
+  x <- unlist(perf@x.values)
+  y <- unlist(perf@y.values)
+  p <- unlist(perf@alpha.values)
+  # for ROC curves
+  if (aucType == 'SS') {
+    d = (x - 0) ^ 2 + (y - 1) ^ 2
+    ind = which(d == min(d))
+    tpr = y[[ind]]
+    fpr = x[[ind]]
+    cutoff = p[[ind]]
+    cat(sprintf("Ideal cutoff is %0.2f, yielding TPR of %0.2f and FPR of %0.2f \n", 
+                cutoff, tpr, fpr))  
+    if (isTRUE(allCutoffsFlg)) {
+      cat(sprintf("%-7s %-6s %-5s \n", 'Thresh', 'TPR', 'FPR'))
+      cat(sprintf("%-7.2f %-6.2f %-6.2f \n", 
+                  unlist(perf@alpha.values), unlist(perf@y.values), unlist(perf@x.values)))  
+    }
+    return(c(cutoff, tpr, fpr)) # list of integers
+    # for PR curves
+  } else if (aucType == 'PR') { 
+    d = (x - 1) ^ 2 + (y - 1) ^ 2
+    # Convert NaNs to one
+    d[ is.nan(d) ] <- 1
+    ind = which(d == min(d))
+    pre = y[[ind]]
+    rec = x[[ind]]
+    cutoff = p[[ind]]
+    cat(sprintf("Ideal cutoff is %0.2f, yielding Precision of %0.2f and Recall of %0.2f \n", 
+                cutoff, pre, rec))  
+    if (isTRUE(allCutoffsFlg)) {
+      cat(sprintf("%-7s %-10s %-10s \n", 'Thresh', 'Precision', 'Recall'))
+      cat(sprintf("%-7.2f %-10.2f %-10.2f \n", 
+                  unlist(perf@alpha.values), unlist(perf@y.values), unlist(perf@x.values)))
+    }
+    return(c(cutoff, pre, rec)) # list of integers
+  }
 }

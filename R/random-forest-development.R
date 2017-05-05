@@ -1,7 +1,3 @@
-# Import the common functions.
-source('R/common.R')
-source('R/supervised-model-development.R')
-
 #' Compare predictive models, created on your data
 #'
 #' @description This step allows you to create a random forest model, based on
@@ -21,8 +17,10 @@ source('R/supervised-model-development.R')
 #' @param object of SuperviseModelParameters class for $new() constructor
 #' @param type The type of model (either 'regression' or 'classification')
 #' @param df Dataframe whose columns are used for calc.
-#' @param grainCol The dataframe's column that has IDs pertaining to the grain
-#' @param predictedCol Column that you want to predict.
+#' @param grainCol Optional. The dataframe's column that has IDs pertaining to 
+#' the grain. No ID columns are truly needed for this step.
+#' @param predictedCol Column that you want to predict. If you're doing
+#' classification then this should be Y/N.
 #' @param impute Set all-column imputation to F or T.
 #' This uses mean replacement for numeric columns
 #' and most frequent for factorized columns.
@@ -70,13 +68,18 @@ source('R/supervised-model-development.R')
 #' ptm <- proc.time()
 #'
 #' # Can delete this line in your work
-#' csvfile <- system.file("extdata", "HCRDiabetesClinical.csv", package = "healthcareai")
+#' csvfile <- system.file("extdata", 
+#'                        "HCRDiabetesClinical.csv", 
+#'                        package = "healthcareai")
 #'
 #' # Replace csvfile with 'your/path'
-#' df <- read.csv(file = csvfile, header = TRUE, na.strings = c("NULL", "NA", ""))
+#' df <- read.csv(file = csvfile, 
+#'                header = TRUE, 
+#'                na.strings = c("NULL", "NA", ""))
 #'
 #' head(df)
 #'
+#' df$PatientID <- NULL
 #' df$InTestWindowFLG <- NULL
 #'
 #' set.seed(42)
@@ -85,7 +88,7 @@ source('R/supervised-model-development.R')
 #' p$df <- df
 #' p$type <- "regression"
 #' p$impute <- TRUE
-#' p$grainCol <- "PatientID"
+#' p$grainCol <- "PatientEncounterID"
 #' p$predictedCol <- "A1CNBR"
 #' p$debug <- FALSE
 #' p$cores <- 1
@@ -102,9 +105,7 @@ source('R/supervised-model-development.R')
 #' print(proc.time() - ptm)
 #'
 #' \donttest{
-#' #### Example using SQL Server data #### This example requires: 1) That you alter
-#' #### your connection string / query
-#' #### This example is specific to Windows and is not tested. 
+#' #### Example using SQL Server data ####
 #'
 #' ptm <- proc.time()
 #' library(healthcareai)
@@ -119,7 +120,6 @@ source('R/supervised-model-development.R')
 #' query <- "
 #' SELECT
 #' [PatientEncounterID]
-#' ,[PatientID]
 #' ,[SystolicBPNBR]
 #' ,[LDLNBR]
 #' ,[A1CNBR]
@@ -141,7 +141,7 @@ source('R/supervised-model-development.R')
 #' p$df <- df
 #' p$type <- "classification"
 #' p$impute <- TRUE
-#' p$grainCol <- "PatientID"
+#' p$grainCol <- "PatientEncounterID"
 #' p$predictedCol <- "ThirtyDayReadmitFLG"
 #' p$debug <- FALSE
 #' p$cores <- 1
@@ -166,9 +166,6 @@ source('R/supervised-model-development.R')
 #' names <- c("Random Forest", "Lasso")
 #' legendLoc <- "bottomleft"
 #' plotPRCurve(rocs, names, legendLoc)
-#'
-#' # For a given true-positive rate, get false-pos rate and 0/1 cutoff
-#' lasso$getCutOffs(tpr = 0.8)
 #'
 #' print(proc.time() - ptm)
 #' }
@@ -257,7 +254,9 @@ RandomForestDevelopment <- R6Class("RandomForestDevelopment",
         self$params$numberOfTrees = p$numberOfTrees
       }
     },
-
+    getPredictions = function(){
+      return(private$predictions)
+    },
     # Override: build RandomForest model
     buildModel = function() {
       trainControlParams.method <- ""
@@ -416,20 +415,11 @@ RandomForestDevelopment <- R6Class("RandomForestDevelopment",
 
     getMAE = function() {
       return(private$MAE)
-    },
-
-    # TODO: move to common, to reduce duplication
-    getCutOffs = function(tpr) {
-      # Get index of when true-positive rate is > tpr
-      indy <- which(as.numeric(unlist(private$ROCPlot@y.values)) > tpr)
-
-      # Correpsonding probability cutoff value (ie when category falls to 1)
-      print('Corresponding cutoff for 0/1 fallover:')
-      print(private$ROCPlot@alpha.values[[1]][indy[1]])
-
-      # Corresponding false-positive rate
-      print('Corresponding false-positive rate:')
-      print(private$ROCPlot@x.values[[1]][indy[1]][[1]])
+    }, 
+    
+    getCutOffs = function() {
+      warning("`getCutOffs` is deprecated. Please use `generateAUC` instead. See 
+              ?generateAUC", call. = FALSE)
     }
   )
 )

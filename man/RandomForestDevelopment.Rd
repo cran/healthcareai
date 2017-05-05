@@ -16,9 +16,11 @@ impute, debug)
 
 \item{df}{Dataframe whose columns are used for calc.}
 
-\item{grainCol}{The dataframe's column that has IDs pertaining to the grain}
+\item{grainCol}{Optional. The dataframe's column that has IDs pertaining to 
+the grain. No ID columns are truly needed for this step.}
 
-\item{predictedCol}{Column that you want to predict.}
+\item{predictedCol}{Column that you want to predict. If you're doing
+classification then this should be Y/N.}
 
 \item{impute}{Set all-column imputation to F or T.
 This uses mean replacement for numeric columns
@@ -69,13 +71,18 @@ library(healthcareai)
 ptm <- proc.time()
 
 # Can delete this line in your work
-csvfile <- system.file("extdata", "HCRDiabetesClinical.csv", package = "healthcareai")
+csvfile <- system.file("extdata", 
+                       "HCRDiabetesClinical.csv", 
+                       package = "healthcareai")
 
 # Replace csvfile with 'your/path'
-df <- read.csv(file = csvfile, header = TRUE, na.strings = c("NULL", "NA", ""))
+df <- read.csv(file = csvfile, 
+               header = TRUE, 
+               na.strings = c("NULL", "NA", ""))
 
 head(df)
 
+df$PatientID <- NULL
 df$InTestWindowFLG <- NULL
 
 set.seed(42)
@@ -84,7 +91,7 @@ p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
 p$type <- "regression"
 p$impute <- TRUE
-p$grainCol <- "PatientID"
+p$grainCol <- "PatientEncounterID"
 p$predictedCol <- "A1CNBR"
 p$debug <- FALSE
 p$cores <- 1
@@ -101,9 +108,7 @@ rf$run()
 print(proc.time() - ptm)
 
 \donttest{
-#### Example using SQL Server data #### This example requires: 1) That you alter
-#### your connection string / query
-#### This example is specific to Windows and is not tested. 
+#### Example using SQL Server data ####
 
 ptm <- proc.time()
 library(healthcareai)
@@ -118,7 +123,6 @@ trusted_connection=true
 query <- "
 SELECT
 [PatientEncounterID]
-,[PatientID]
 ,[SystolicBPNBR]
 ,[LDLNBR]
 ,[A1CNBR]
@@ -140,7 +144,7 @@ p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
 p$type <- "classification"
 p$impute <- TRUE
-p$grainCol <- "PatientID"
+p$grainCol <- "PatientEncounterID"
 p$predictedCol <- "ThirtyDayReadmitFLG"
 p$debug <- FALSE
 p$cores <- 1
@@ -165,9 +169,6 @@ rocs <- list(rf$getPRCurve(), lasso$getPRCurve())
 names <- c("Random Forest", "Lasso")
 legendLoc <- "bottomleft"
 plotPRCurve(rocs, names, legendLoc)
-
-# For a given true-positive rate, get false-pos rate and 0/1 cutoff
-lasso$getCutOffs(tpr = 0.8)
 
 print(proc.time() - ptm)
 }

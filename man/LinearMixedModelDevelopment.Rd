@@ -20,7 +20,8 @@ grainCol, personCol, predictedCol, impute, debug)
 
 \item{personCol}{The data frame's ID column pertaining to the person/patient}
 
-\item{predictedCol}{Column that you want to predict.}
+\item{predictedCol}{Column that you want to predict. If you're doing
+classification then this should be Y/N.}
 
 \item{impute}{Set all-column imputation to F or T.
 This uses mean replacement for numeric columns
@@ -123,9 +124,6 @@ set.seed(42)
 # Run Lasso
 # Lasso <- LassoDevelopment$new(p)
 # Lasso$run()
-
-# For a given true-positive rate, get false-pos rate and 0/1 cutoff
-# Lasso$getCutOffs(tpr = 0.8)
 print(proc.time() - ptm)
 
 \donttest{
@@ -200,9 +198,6 @@ rocs <- list(lmm$getPRCurve(), rf$getPRCurve())
 names <- c("Linear Mixed Model", "Random Forest")
 legendLoc <- "bottomleft"
 plotPRCurve(rocs, names, legendLoc)
-
-# For a given true-positive rate, get false-pos rate and 0/1 cutoff
-lmm$getCutOffs(tpr = 0.8)
 
 print(proc.time() - ptm)
 }

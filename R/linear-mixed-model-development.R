@@ -1,6 +1,3 @@
-source('R/common.R')
-source('R/supervised-model-development.R')
-
 #' Compare predictive models, created on your data
 #'
 #' @description This step allows one to create test models on your data
@@ -23,7 +20,8 @@ source('R/supervised-model-development.R')
 #' @param df Dataframe whose columns are used for calc.
 #' @param grainCol The data frame's ID column pertaining to the grain
 #' @param personCol The data frame's ID column pertaining to the person/patient
-#' @param predictedCol Column that you want to predict.
+#' @param predictedCol Column that you want to predict. If you're doing
+#' classification then this should be Y/N.
 #' @param impute Set all-column imputation to F or T.
 #' This uses mean replacement for numeric columns
 #' and most frequent for factorized columns.
@@ -121,9 +119,6 @@ source('R/supervised-model-development.R')
 #' # Run Lasso
 #' # Lasso <- LassoDevelopment$new(p)
 #' # Lasso$run()
-#'
-#' # For a given true-positive rate, get false-pos rate and 0/1 cutoff
-#' # Lasso$getCutOffs(tpr = 0.8)
 #' print(proc.time() - ptm)
 #' 
 #' \donttest{
@@ -199,9 +194,6 @@ source('R/supervised-model-development.R')
 #' legendLoc <- "bottomleft"
 #' plotPRCurve(rocs, names, legendLoc)
 #'
-#' # For a given true-positive rate, get false-pos rate and 0/1 cutoff
-#' lmm$getCutOffs(tpr = 0.8)
-#'
 #' print(proc.time() - ptm)
 #' }
 #' 
@@ -244,7 +236,9 @@ LinearMixedModelDevelopment <- R6Class("LinearMixedModelDevelopment",
     initialize = function(p) {
       super$initialize(p)
     },
-
+    getPredictions = function(){
+      return(private$predictions)
+    },
     # Start of functions
     buildDataset = function(){
       # TODO Soon: Prepare data according to InTestWindow column, in case
@@ -409,19 +403,11 @@ LinearMixedModelDevelopment <- R6Class("LinearMixedModelDevelopment",
 
     getPerf = function() {
       return(private$perf)
-    },
-
-    getCutOffs = function(tpr) {
-      # Get index of when true-positive rate is > tpr
-      indy <- which(as.numeric(unlist(private$ROCPlot@y.values)) > tpr)
-
-      # Correpsonding probability cutoff value (ie when category falls to 1)
-      print('Corresponding cutoff for 0/1 fallover:')
-      print(private$ROCPlot@alpha.values[[1]][indy[1]])
-
-      # Corresponding false-positive rate
-      print('Corresponding false-positive rate:')
-      print(private$ROCPlot@x.values[[1]][indy[1]][[1]])
+    }, 
+    
+    getCutOffs = function() {
+      warning("`getCutOffs` is deprecated. Please use `generateAUC` instead. See 
+              ?generateAUC", call. = FALSE)
     }
   )
 )

@@ -6,7 +6,8 @@
 \title{Deploy a production-ready predictive Lasso model}
 \format{An object of class \code{R6ClassGenerator} of length 24.}
 \usage{
-LassoDeployment(type, df, grainCol, testWindowCol, predictedCol, impute)
+LassoDeployment(type, df, grainCol, testWindowCol, predictedCol, 
+impute, debug)
 }
 \arguments{
 \item{type}{The type of model (either 'regression' or 'classification')}
@@ -15,17 +16,19 @@ LassoDeployment(type, df, grainCol, testWindowCol, predictedCol, impute)
 
 \item{grainCol}{The dataframe's column that has IDs pertaining to the grain}
 
-\item{testWindowCol}{This column dictates the split between model training and
-test sets. Those rows with zeros in this column indicate the training set
-while those that have ones indicate the test set}
+\item{testWindowCol}{Y or N. This column dictates the split between model 
+training and test sets. Those rows with N in this column indicate the 
+training set while those that have Y indicate the test set}
 
-\item{predictedCol}{Column that you want to predict.}
+\item{predictedCol}{Column that you want to predict. If you're doing
+classification then this should be Y/N.}
 
 \item{impute}{For training df, set all-column imputation to F or T.
 This uses mean replacement for numeric columns
 and most frequent for factorized columns.
-F leads to removal of rows containing NULLs.
-#' @param debug Provides the user extended output to the console, in order
+F leads to removal of rows containing NULLs.}
+
+\item{debug}{Provides the user extended output to the console, in order
 to monitor the calculations throughout. Use T or F.}
 }
 \description{
@@ -39,19 +42,60 @@ This step allows one to
 }
 \examples{
 
+#### Regression Example using csv data ####
+ptm <- proc.time()
+library(healthcareai)
+
+# setwd('C:/Yourscriptlocation/Useforwardslashes') # Uncomment if using csv
+
+# Can delete this line in your work
+csvfile <- system.file("extdata", 
+                       "HCRDiabetesClinical.csv", 
+                       package = "healthcareai")
+
+# Replace csvfile with 'path/file'
+df <- read.csv(file = csvfile, 
+               header = TRUE, 
+               na.strings = c("NULL", "NA", ""))
+
+head(df)
+str(df)
+
+# Remove unnecessary columns
+df$PatientID <- NULL
+
+p <- SupervisedModelDeploymentParams$new()
+p$type <- "regression"
+p$df <- df
+p$grainCol <- "PatientEncounterID"
+p$testWindowCol <- "InTestWindowFLG"
+p$predictedCol <- "A1CNBR"
+p$impute <- TRUE
+p$debug <- FALSE
+p$useSavedModel <- FALSE
+p$cores <- 1
+p$writeToDB <- FALSE
+
+dL <- LassoDeployment$new(p)
+dL$deploy()
+
+df <- dL$getOutDf()
+# Write to CSV (or JSON, MySQL, etc) using plain R syntax
+# write.csv(df,'path/predictionsfile.csv')
+
+print(proc.time() - ptm)
+
 \donttest{
-#### This example is specific to Windows and is not tested.
-#### Regression example using diabetes data ####
+#### Classification example using SQL Server data ####
 # This example requires you to first create a table in SQL Server
 # If you prefer to not use SAMD, execute this in SSMS to create output table:
-# CREATE TABLE dbo.HCRDeployRegressionBASE(
+# CREATE TABLE dbo.HCRDeployClassificationBASE(
 #   BindingID float, BindingNM varchar(255), LastLoadDTS datetime2,
 #   PatientEncounterID int, <--change to match inputID
-#   PredictedValueNBR decimal(38, 2),
+#   PredictedProbNBR decimal(38, 2),
 #   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
 # )
 
-# setwd('C:/Yourscriptlocation/Useforwardslashes') # Uncomment if using csv
 ptm <- proc.time()
 library(healthcareai)
 
@@ -64,7 +108,7 @@ trusted_connection=true
 
 query <- "
 SELECT
- [PatientEncounterID] --Only need one ID column for lasso
+ [PatientEncounterID] --Only need one ID column for random forest
 ,[SystolicBPNBR]
 ,[LDLNBR]
 ,[A1CNBR]
@@ -78,9 +122,65 @@ FROM [SAM].[dbo].[HCRDiabetesClinical]
 df <- selectData(connection.string, query)
 
 head(df)
+str(df)
 
-# Remove unnecessary columns
-df$SomeColumn <- NULL
+p <- SupervisedModelDeploymentParams$new()
+p$type <- "classification"
+p$df <- df
+p$grainCol <- "PatientEncounterID"
+p$testWindowCol <- "InTestWindowFLG"
+p$predictedCol <- "ThirtyDayReadmitFLG"
+p$impute <- TRUE
+p$debug <- FALSE
+p$useSavedModel <- FALSE
+p$cores <- 1
+p$sqlConn <- connection.string
+p$destSchemaTable <- "dbo.HCRDeployClassificationBASE"
+
+dL <- LassoDeployment$new(p)
+dL$deploy()
+
+print(proc.time() - ptm)
+}
+
+\donttest{
+#### Regression Example using SQL Server data ####
+# This example requires you to first create a table in SQL Server
+# If you prefer to not use SAMD, execute this in SSMS to create output table:
+# CREATE TABLE dbo.HCRDeployRegressionBASE(
+#   BindingID float, BindingNM varchar(255), LastLoadDTS datetime2,
+#   PatientEncounterID int, <--change to match inputID
+#   PredictedValueNBR decimal(38, 2),
+#   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
+# )
+
+ptm <- proc.time()
+library(healthcareai)
+
+connection.string <- "
+driver={SQL Server};
+server=localhost;
+database=SAM;
+trusted_connection=true
+"
+
+query <- "
+SELECT
+ [PatientEncounterID] --Only need one ID column for random forest
+,[SystolicBPNBR]
+,[LDLNBR]
+,[A1CNBR]
+,[GenderFLG]
+,[ThirtyDayReadmitFLG]
+,[InTestWindowFLG]
+FROM [SAM].[dbo].[HCRDiabetesClinical]
+--no WHERE clause, because we want train AND test
+"
+
+df <- selectData(connection.string, query)
+
+head(df)
+str(df)
 
 p <- SupervisedModelDeploymentParams$new()
 p$type <- "regression"
@@ -100,7 +200,6 @@ dL$deploy()
 
 print(proc.time() - ptm)
 }
-
 }
 \seealso{
 \code{\link{healthcareai}}
