@@ -6,46 +6,78 @@
 \title{Deploy a production-ready predictive Lasso model}
 \format{An object of class \code{R6ClassGenerator} of length 24.}
 \usage{
-LassoDeployment(type, df, grainCol, testWindowCol, predictedCol, 
-impute, debug)
+LassoDeployment(type, df, grainCol, predictedCol, impute, debug, cores, modelName)
 }
 \arguments{
 \item{type}{The type of model (either 'regression' or 'classification')}
 
-\item{df}{Dataframe whose columns are used for calc.}
+\item{df}{Dataframe whose columns are used for new predictions. Data structure should match development as 
+much as possible. Number of columns, names, types, grain, and predicted must be the same.}
 
 \item{grainCol}{The dataframe's column that has IDs pertaining to the grain}
 
-\item{testWindowCol}{Y or N. This column dictates the split between model 
-training and test sets. Those rows with N in this column indicate the 
-training set while those that have Y indicate the test set}
+\item{predictedCol}{Column that you want to predict.}
 
-\item{predictedCol}{Column that you want to predict. If you're doing
-classification then this should be Y/N.}
-
-\item{impute}{For training df, set all-column imputation to F or T.
-This uses mean replacement for numeric columns
-and most frequent for factorized columns.
-F leads to removal of rows containing NULLs.}
+\item{impute}{For training df, set all-column imputation to T or F.
+If T, this uses values calculated in development.
+F leads to removal of rows containing NULLs and is not recommended.}
 
 \item{debug}{Provides the user extended output to the console, in order
 to monitor the calculations throughout. Use T or F.}
+
+\item{cores}{Number of cores you'd like to use. Defaults to 2.}
+
+\item{modelName}{Optional string. Can specify the model name. If used, you must load the same one in the deploy step.}
 }
 \description{
 This step allows one to
 \itemize{
-\item Create a final model on all of your training data
-\item Automatically save the model
+\item Load a saved model from \code{\link{LassoDevelopment}}
 \item Run the model against test data to generate predictions
 \item Push these predictions to SQL Server
 }
 }
+\section{Methods}{
+ 
+The above describes params for initializing a new lassoDeployment class with 
+\code{$new()}. Individual methods are documented below.
+}
+
+\section{\code{$new()}}{
+
+Initializes a new lasso deployment class using the 
+parameters saved in \code{p}, documented above. This method loads, cleans, and prepares data for
+generating predictions. \cr
+\emph{Usage:} \code{$new(p)}
+}
+
+\section{\code{$deploy()}}{
+
+Generate new predictions, calculate top factors, and prepare the output dataframe. \cr
+\emph{Usage:}\code{$deploy()}
+}
+
+\section{\code{$getTopFactors()}}{
+
+Return the grain, all top factors, and their weights. \cr
+\emph{Usage:} \code{$getTopFactors(numberOfFactors = NA, includeWeights = FALSE)} \cr
+Params: \cr
+  - \code{numberOfFactors:} returns the top \code{n} factors. Defaults to all factors. \cr
+  - \code{includeWeights:} If \code{TRUE}, returns weights associated with each factor.
+}
+
+\section{\code{$getOutDf()}}{
+
+Returns the output dataframe. \cr
+\emph{Usage:} \code{$getOutDf()}
+}
+
 \examples{
 
-#### Regression Example using csv data ####
+#### Classification Example using csv data ####
+## 1. Loading data and packages.
 ptm <- proc.time()
 library(healthcareai)
-
 # setwd('C:/Yourscriptlocation/Useforwardslashes') # Uncomment if using csv
 
 # Can delete this line in your work
@@ -58,30 +90,49 @@ df <- read.csv(file = csvfile,
                header = TRUE, 
                na.strings = c("NULL", "NA", ""))
 
-head(df)
+df$PatientID <- NULL # Only one ID column (ie, PatientEncounterID) is needed remove this column
+
+# Save a dataframe for validation later on
+dfDeploy <- df[951:1000,]
+
+## 2. Train and save the model using DEVELOP
+print('Historical, development data:')
 str(df)
 
-# Remove unnecessary columns
-df$PatientID <- NULL
-
-p <- SupervisedModelDeploymentParams$new()
-p$type <- "regression"
+set.seed(42)
+p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
-p$grainCol <- "PatientEncounterID"
-p$testWindowCol <- "InTestWindowFLG"
-p$predictedCol <- "A1CNBR"
+p$type <- "classification"
 p$impute <- TRUE
+p$grainCol <- "PatientEncounterID"
+p$predictedCol <- "ThirtyDayReadmitFLG"
 p$debug <- FALSE
-p$useSavedModel <- FALSE
 p$cores <- 1
-p$writeToDB <- FALSE
 
-dL <- LassoDeployment$new(p)
+# Run Lasso
+Lasso<- LassoDevelopment$new(p)
+Lasso$run()
+
+## 3. Load saved model and use DEPLOY to generate predictions. 
+print('Fake production data:')
+str(dfDeploy)
+
+p2 <- SupervisedModelDeploymentParams$new()
+p2$type <- "classification"
+p2$df <- dfDeploy
+p2$grainCol <- "PatientEncounterID"
+p2$predictedCol <- "ThirtyDayReadmitFLG"
+p2$impute <- TRUE
+p2$debug <- FALSE
+p2$cores <- 1
+
+dL <- LassoDeployment$new(p2)
 dL$deploy()
 
-df <- dL$getOutDf()
+dfOut <- dL$getOutDf()
+head(dfOut)
 # Write to CSV (or JSON, MySQL, etc) using plain R syntax
-# write.csv(df,'path/predictionsfile.csv')
+# write.csv(dfOut,'path/predictionsfile.csv')
 
 print(proc.time() - ptm)
 
@@ -96,6 +147,7 @@ print(proc.time() - ptm)
 #   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
 # )
 
+## 1. Loading data and packages.
 ptm <- proc.time()
 library(healthcareai)
 
@@ -108,37 +160,58 @@ trusted_connection=true
 
 query <- "
 SELECT
- [PatientEncounterID] --Only need one ID column for random forest
+[PatientEncounterID] --Only need one ID column for lasso
 ,[SystolicBPNBR]
 ,[LDLNBR]
 ,[A1CNBR]
 ,[GenderFLG]
 ,[ThirtyDayReadmitFLG]
-,[InTestWindowFLG]
 FROM [SAM].[dbo].[HCRDiabetesClinical]
---no WHERE clause, because we want train AND test
 "
 
 df <- selectData(connection.string, query)
 
-head(df)
+# Save a dataframe for validation later on
+dfDeploy <- df[951:1000,]
+
+## 2. Train and save the model using DEVELOP
+print('Historical, development data:')
 str(df)
 
-p <- SupervisedModelDeploymentParams$new()
-p$type <- "classification"
+set.seed(42)
+p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
-p$grainCol <- "PatientEncounterID"
-p$testWindowCol <- "InTestWindowFLG"
-p$predictedCol <- "ThirtyDayReadmitFLG"
+p$type <- "classification"
 p$impute <- TRUE
+p$grainCol <- "PatientEncounterID"
+p$predictedCol <- "ThirtyDayReadmitFLG"
 p$debug <- FALSE
-p$useSavedModel <- FALSE
 p$cores <- 1
-p$sqlConn <- connection.string
-p$destSchemaTable <- "dbo.HCRDeployClassificationBASE"
 
-dL <- LassoDeployment$new(p)
+# Run Lasso
+Lasso<- LassoDevelopment$new(p)
+Lasso$run()
+
+## 3. Load saved model and use DEPLOY to generate predictions. 
+print('Fake production data:')
+str(dfDeploy)
+
+p2 <- SupervisedModelDeploymentParams$new()
+p2$type <- "classification"
+p2$df <- dfDeploy
+p2$grainCol <- "PatientEncounterID"
+p2$predictedCol <- "ThirtyDayReadmitFLG"
+p2$impute <- TRUE
+p2$debug <- FALSE
+p2$cores <- 1
+
+dL <- LassoDeployment$new(p2)
 dL$deploy()
+dfOut <- dL$getOutDf()
+
+writeData(MSSQLConnectionString = connection.string,
+          df = dfOut,
+          tableName = 'HCRDeployClassificationBASE')
 
 print(proc.time() - ptm)
 }
@@ -154,6 +227,7 @@ print(proc.time() - ptm)
 #   Factor1TXT varchar(255), Factor2TXT varchar(255), Factor3TXT varchar(255)
 # )
 
+## 1. Loading data and packages.
 ptm <- proc.time()
 library(healthcareai)
 
@@ -166,42 +240,199 @@ trusted_connection=true
 
 query <- "
 SELECT
- [PatientEncounterID] --Only need one ID column for random forest
+[PatientEncounterID] --Only need one ID column for lasso
 ,[SystolicBPNBR]
 ,[LDLNBR]
 ,[A1CNBR]
 ,[GenderFLG]
 ,[ThirtyDayReadmitFLG]
-,[InTestWindowFLG]
 FROM [SAM].[dbo].[HCRDiabetesClinical]
---no WHERE clause, because we want train AND test
 "
 
 df <- selectData(connection.string, query)
 
-head(df)
+# Save a dataframe for validation later on
+dfDeploy <- df[951:1000,]
+
+## 2. Train and save the model using DEVELOP
+print('Historical, development data:')
 str(df)
 
-p <- SupervisedModelDeploymentParams$new()
-p$type <- "regression"
+set.seed(42)
+p <- SupervisedModelDevelopmentParams$new()
 p$df <- df
-p$grainCol <- "PatientEncounterID"
-p$testWindowCol <- "InTestWindowFLG"
-p$predictedCol <- "A1CNBR"
+p$type <- "regression"
 p$impute <- TRUE
+p$grainCol <- "PatientEncounterID"
+p$predictedCol <- "A1CNBR"
 p$debug <- FALSE
-p$useSavedModel <- FALSE
 p$cores <- 1
-p$sqlConn <- connection.string
-p$destSchemaTable <- "dbo.HCRDeployRegressionBASE"
 
-dL <- LassoDeployment$new(p)
+# Run lasso
+Lasso<- LassoDevelopment$new(p)
+Lasso$run()
+
+## 3. Load saved model and use DEPLOY to generate predictions. 
+print('Fake production data:')
+str(dfDeploy)
+
+p2 <- SupervisedModelDeploymentParams$new()
+p2$type <- "regression"
+p2$df <- dfDeploy
+p2$grainCol <- "PatientEncounterID"
+p2$predictedCol <- "A1CNBR"
+p2$impute <- TRUE
+p2$debug <- FALSE
+p2$cores <- 1
+
+dL <- LassoDeployment$new(p2)
 dL$deploy()
+dfOut <- dL$getOutDf()
+
+writeData(MSSQLConnectionString = connection.string,
+          df = dfOut,
+          tableName = 'HCRDeployRegressionBASE')
 
 print(proc.time() - ptm)
 }
+
+#### Classification example pulling from CSV and writing to SQLite ####
+
+## 1. Loading data and packages.
+ptm <- proc.time()
+library(healthcareai)
+
+# Can delete these system.file lines in your work
+csvfile <- system.file("extdata", 
+                       "HCRDiabetesClinical.csv", 
+                       package = "healthcareai")
+                       
+sqliteFile <- system.file("extdata",
+                          "unit-test.sqlite",
+                          package = "healthcareai")
+
+# Read in CSV; replace csvfile with 'path/file'
+df <- read.csv(file = csvfile, 
+               header = TRUE, 
+               na.strings = c("NULL", "NA", ""))
+
+df$PatientID <- NULL # Only one ID column (ie, PatientEncounterID) is needed
+
+# Save a dataframe for validation later on
+dfDeploy <- df[951:1000,]
+
+## 2. Train and save the model using DEVELOP
+print('Historical, development data:')
+str(df)
+
+set.seed(42)
+p <- SupervisedModelDevelopmentParams$new()
+p$df <- df
+p$type <- "classification"
+p$impute <- TRUE
+p$grainCol <- "PatientEncounterID"
+p$predictedCol <- "ThirtyDayReadmitFLG"
+p$debug <- FALSE
+p$cores <- 1
+
+# Run lasso
+Lasso <- LassoDevelopment$new(p)
+Lasso$run()
+
+## 3. Load saved model and use DEPLOY to generate predictions. 
+print('Fake production data:')
+str(dfDeploy)
+
+p2 <- SupervisedModelDeploymentParams$new()
+p2$type <- "classification"
+p2$df <- dfDeploy
+p2$grainCol <- "PatientEncounterID"
+p2$predictedCol <- "ThirtyDayReadmitFLG"
+p2$impute <- TRUE
+p2$debug <- FALSE
+p2$cores <- 1
+
+dL <- LassoDeployment$new(p2)
+dL$deploy()
+dfOut <- dL$getOutDf()
+
+writeData(SQLiteFileName = sqliteFile,
+          df = dfOut,
+          tableName = 'HCRDeployClassificationBASE')
+
+print(proc.time() - ptm)
+
+#### Regression example pulling from CSV and writing to SQLite ####
+
+## 1. Loading data and packages.
+ptm <- proc.time()
+library(healthcareai)
+
+# Can delete these system.file lines in your work
+csvfile <- system.file("extdata", 
+                       "HCRDiabetesClinical.csv", 
+                       package = "healthcareai")
+
+sqliteFile <- system.file("extdata",
+                          "unit-test.sqlite",
+                          package = "healthcareai")
+
+# Read in CSV; replace csvfile with 'path/file'
+df <- read.csv(file = csvfile, 
+               header = TRUE, 
+               na.strings = c("NULL", "NA", ""))
+
+df$PatientID <- NULL # Only one ID column (ie, PatientEncounterID) is needed remove this column
+
+# Save a dataframe for validation later on
+dfDeploy <- df[951:1000,]
+
+## 2. Train and save the model using DEVELOP
+print('Historical, development data:')
+str(df)
+
+set.seed(42)
+p <- SupervisedModelDevelopmentParams$new()
+p$df <- df
+p$type <- "regression"
+p$impute <- TRUE
+p$grainCol <- "PatientEncounterID"
+p$predictedCol <- "A1CNBR"
+p$debug <- FALSE
+p$cores <- 1
+
+# Run lasso
+Lasso<- LassoDevelopment$new(p)
+Lasso$run()
+
+## 3. Load saved model and use DEPLOY to generate predictions. 
+print('Fake production data:')
+str(dfDeploy)
+
+p2 <- SupervisedModelDeploymentParams$new()
+p2$type <- "regression"
+p2$df <- dfDeploy
+p2$grainCol <- "PatientEncounterID"
+p2$predictedCol <- "A1CNBR"
+p2$impute <- TRUE
+p2$debug <- FALSE
+p2$cores <- 1
+
+dL <- LassoDeployment$new(p2)
+dL$deploy()
+dfOut <- dL$getOutDf()
+
+writeData(SQLiteFileName = sqliteFile,
+          df = dfOut,
+          tableName = 'HCRDeployRegressionBASE')
+
+print(proc.time() - ptm)
 }
 \seealso{
 \code{\link{healthcareai}}
+
+\code{\link{writeData}}
+
+\code{\link{selectData}}
 }
 \keyword{datasets}
