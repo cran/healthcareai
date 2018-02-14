@@ -1,8 +1,8 @@
 Package: healthcareai
 Type: Package
 Title: Tools for Healthcare Machine Learning
-Version: 1.2.3
-Date: 2017-12-20
+Version: 1.2.4
+Date: 2018-02-14
 Authors@R: c(
     person("Levi", "Thatcher", email = "levi.thatcher@healthcatalyst.com", role = "aut"),
     person("Michael", "Levy", email = "michael.levy@healthcatalyst.com", role = c("aut", "cre")),
@@ -24,7 +24,7 @@ Suggests: testthat
 URL: http://healthcareai-r.readthedocs.io
 BugReports: https://github.com/HealthCatalyst/healthcareai-r/issues
 NeedsCompilation: no
-Packaged: 2017-12-21 05:16:46 UTC; michael.levy
+Packaged: 2018-02-14 17:59:28 UTC; michael.levy
 Author: Levi Thatcher [aut],
   Michael Levy [aut, cre],
   Mike Mastanduno [aut],
@@ -32,4 +32,4 @@ Author: Levi Thatcher [aut],
   Taylor Miller [aut]
 Maintainer: Michael Levy <michael.levy@healthcatalyst.com>
 Repository: CRAN
-Date/Publication: 2017-12-22 22:53:26 UTC
+Date/Publication: 2018-02-14 18:47:54 UTC

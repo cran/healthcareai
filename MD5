@@ -1,4 +1,4 @@
-08cb7e7b96c3d48dbf7015b68ca75722 *DESCRIPTION
+8336978ebd7ba6993219cd5611936f56 *DESCRIPTION
 a7d1b8c8ff43bdefccbbfbd189233d45 *LICENSE
 ca4666bcd935633fc55ec4898b2704f2 *NAMESPACE
 ccd69619a52682c64913a5f45e748aa5 *R/common-LIME-like.R
@@ -38,7 +38,8 @@ e9162ee847f771f8760581bfa91916e4 *R/supervised-model-deployment.R
 bc884aa96d19484436c25eeb9818e3b2 *R/use-globals.R
 809a7c7381fcf48e11aa416bdfccbd1f *R/xgboost-deployment.R
 b6394029a1c4ca97b10820a7b9447dd4 *R/xgboost-development.R
-935466037ceff0ace2b91d2ddbf4dd5b *README.md
+5b554f0b6ccfcaa2cdd2bd6967fe2272 *R/zzz.R
+9509ee12903a8ccc27ca4052a924460b *README.md
 faebe0c8f7b567fe0fc2295481e8fc18 *inst/docs/clustering/Kmeans-clustering.md
 d9297809d6bf61025676be4c7f80fb73 *inst/docs/clustering/img/clustering_result.png
 532337800d27bb9ba1c83783cb6d9ac6 *inst/docs/clustering/img/clustering_result_labels.png
@@ -150,7 +151,7 @@ c028f2ceb199fbb958fe7a16399c48f3 *man/splitOutDateTimeCols.Rd
 71b142e0037845c7bfba7a62ade49e31 *man/variationAcrossGroups.Rd
 61008bb66a132a9b0ecccdfcc73c2e82 *man/writeData.Rd
 81020b046d4b4ed0b13ad30373c6dea2 *tests/testthat.R
-32e7c4b91f64975e40540d4b054778d4 *tests/testthat/test-XGBoost-deploy-pushes-to-sql.R
+bb096df825e05ba02db7cdcb5ce11612 *tests/testthat/test-XGBoost-deploy-pushes-to-sql.R
 a3886c0c409d9d2626a60a3a74ca3aa7 *tests/testthat/test-calculate-coefficient-of-variation-COV.R
 74e8ac4526628f5bf2b430077673c746 *tests/testthat/test-calculate-confusion.R
 2b900ec34ec1407adc923ae313404295 *tests/testthat/test-calculate-hour-bins.R
@@ -159,7 +160,6 @@ e3336987dfb65219370c1dc2b7bf2df7 *tests/testthat/test-count-percent-empty.R
 3d6c3010fce07014217636de5cf306c3 *tests/testthat/test-create-variance-tall-table.R
 ede7019f6d359da654e0265708a4c89c *tests/testthat/test-data-scale.R
 65b3a7c70f4da5aff08fa1bc4691d07e *tests/testthat/test-deploy-pushes-to-sql-server.R
-28d54351cae34998476a7d55b92398b6 *tests/testthat/test-deploy-pushes-to-sqlite.R
 7827ceebbea12873e0f0c03f26b0bb49 *tests/testthat/test-deploy-specific-values.R
 7d125decfc9bd7ed0ea1e74b0b86bf3e *tests/testthat/test-deploy-to-df-has-no-nulls.R
 ce0af3ba48509a692bd5dadfe634a898 *tests/testthat/test-develop-supervised-model.R
@@ -194,6 +194,5 @@ d4d0c13dfc30fe1b38bc0fcde4aa9189 *tests/testthat/test-saving-model.R
 116f7b5b55b2b7f0874cce3990c2e0ce *tests/testthat/test-top-factors-getter.R
 eaa3ba93eaa5eb36b77813328948734e *tests/testthat/test-variation-across-groups.R
 cbc10147a4ee08964528888e1a90a1b3 *tests/testthat/test-vector-is-binary.r
-9bc084610999ca6ccf2ff50da0e5ec0d *tests/testthat/test-write-data.r
 da8a0f49f20508912e7ac9da43e02099 *tests/testthat/test-xgboost-deploy.R
 d76f223273d69ed4f8fe617f21c57c03 *tests/testthat/test-xgboost-develop.R
