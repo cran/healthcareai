@@ -135,6 +135,15 @@ test_that("prep_data works with defaults and two ignore columns", {
   expect_true(all(d_clean$genre[is.na(d_train$genre)] == "missing"))
 })
 
+test_that("prep_data correctly attaches original data str", {
+  ods <- attr(d_prep, "original_data_str")
+  expect_s3_class(ods, "data.frame")
+  expect_equal(0, nrow(ods))
+  dtn <- names(d_train)
+  expect_setequal(dtn[-which(dtn == "is_ween")], names(ods))
+  expect_equal(ods, attr(d_reprep, "original_data_str"))
+})
+
 test_that("0/1 outcome is converted to N/Y", {
   d_train <- dplyr::mutate(d_train, is_ween = ifelse(is_ween == "Y", 1, 0))
   d_clean <- prep_data(d = d_train, outcome = is_ween)
@@ -268,7 +277,7 @@ test_that("centering and scaling work", {
 test_that("dummy columns are created as expected", {
   d_clean <- prep_data(d = d_train, outcome = is_ween, song_id,
                        convert_dates = FALSE, make_dummies = TRUE,
-                       add_levels = FALSE)
+                       add_levels = FALSE, collapse_rare_factors = FALSE)
   exp <- c("genre_Jazz", "genre_Rock", "genre_missing")
   n <- names(dplyr::select(d_clean, dplyr::starts_with("genre")))
   expect_true(all(exp %in% n))
@@ -297,7 +306,7 @@ test_that("only the first few rows of training data are stored in the recipe", {
 test_that("warning is given when ignored columns have missingness", {
   expect_warning(
     prep_data(d_train, reaction, length),
-    regexp = "reaction, length")
+    regexp = "reaction and length")
 })
 
 test_that("names of ignored columns get attached as attribute to recipe", {
@@ -355,16 +364,51 @@ test_that("remove_near_zero_variance is respected, works, and messages", {
   d_train <- dplyr::mutate(d_train,
                            a_nzv_col = c("rare", rep("common", nrow(d_train) - 1)))
   expect_message(def <- prep_data(d_train), regexp = "a_nzv_col")
-  expect_false("a_nzv_col" %in% names(def))
+  expect_false("a_nzv_col_rare" %in% names(def))
   # nzv_col should be removed in deployement even if it has variance
   d_test <- dplyr::mutate(d_test,
                           a_nzv_col = sample(letters, nrow(d_test), replace = TRUE))
   expect_message(pd <- prep_data(d_test, recipe = def), regexp = "a_nzv_col")
-  expect_false("a_nzv_col" %in% names(def))
+  expect_false("a_nzv_col_rare" %in% names(def))
   stay <- prep_data(d_train, remove_near_zero_variance = FALSE, make_dummies = FALSE)
   expect_true("a_nzv_col" %in% names(stay))
   expect_error(prep_data(dplyr::select(d_train, a_nzv_col, is_ween), outcome = is_ween),
-               "github.com")
+               "less aggressive")
+})
+
+test_that("remove_near_zero_variance works with params", {
+  # Meets criteria
+  d_train <- dplyr::mutate(d_train,
+                           a_nzv_col = c("rare", rep("common", nrow(d_train) - 1)))
+  expect_error(def <- prep_data(d_train,
+                                remove_near_zero_variance = "chowder"),
+               regexp = "logical or numeric")
+  expect_message(def <- prep_data(d_train,
+                                  remove_near_zero_variance = 0.01)
+                 , regexp = "a_nzv_col")
+  expect_false("a_nzv_col_rare" %in% names(def))
+  # nzv_col should be removed in deployement even if it has variance
+  d_test <- dplyr::mutate(d_test,
+                          a_nzv_col = sample(letters, nrow(d_test), replace = TRUE))
+  expect_message(pd <- prep_data(d_test, recipe = def), regexp = "a_nzv_col")
+  expect_false("a_nzv_col_rare" %in% names(def))
+
+  expect_error(def <- d_train %>%
+                 select(guitar_flag, a_nzv_col, length) %>%
+                 prep_data(remove_near_zero_variance = .1),
+               regexp = "less aggressive")
+
+  # Doesn't meet criteria
+  d_train$a_nzv_col[1:30] <- "rare"
+  d_train$a_nzv_col[31:50] <- letters[1:20]
+  def <- prep_data(d_train,
+                   remove_near_zero_variance = .11)
+  expect_true("a_nzv_col_rare" %in% names(def))
+  # nzv_col should be removed in deployement even if it has variance
+  d_test <- dplyr::mutate(d_test,
+                          a_nzv_col = sample(letters, nrow(d_test), replace = TRUE))
+  pd <- prep_data(d_test, recipe = def)
+  expect_true("a_nzv_col_rare" %in% names(def))
 })
 
 test_that("collapse_rare_factors works", {
@@ -424,7 +468,8 @@ test_that("add_levels doesn't add levels to outcome", {
 
 test_that("prep_data respects add_levels = FALSE", {
   d <- data.frame(x = c("A", "B", "B"), y = 1:3)
-  pd <- prep_data(d, add_levels = FALSE, make_dummies = FALSE, impute = FALSE)
+  pd <- prep_data(d, add_levels = FALSE, make_dummies = FALSE,
+                  impute = FALSE, collapse_rare_factors = FALSE)
   expect_false(any(c("other", "missing") %in% levels(pd$x)))
 })
 

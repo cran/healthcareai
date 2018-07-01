@@ -21,6 +21,7 @@
 #'                 y = c(1, NaN, 3),
 #'                 z = c(1:2, NA))
 #' missingness(d)
+#' missingness(d) %>% plot()
 missingness <- function(d,
                         return_df = TRUE,
                         to_search = c("NA", "NAs", "na", "NaN",
@@ -41,23 +42,14 @@ missingness <- function(d,
   if (length(possible_na)) {
     possible_na <- map_chr(possible_na, function(st) paste0('"', st, '"'))
     warning("Found these strings that may represent missing values: ",
-            paste(possible_na, collapse = ", "),
+            list_variables(possible_na),
             ". If they do represent missingness, replace them with NA.")
   }
 
-  miss <-
-    d %>%
-    purrr::map_int(~sum(is.na(.x))) %>%
-    `/`(nrow(d)) %>%
-    sort() %>%
-    `*`(100) %>%
-    round(1)
+  miss <- sort(100 * purrr::map_int(d, ~sum(is.na(.x))) / nrow(d))
 
   if (return_df) {
-    miss <- data.frame(variable = names(miss),
-                       percent_missing = miss,
-                       stringsAsFactors = FALSE)
-    rownames(miss) <- NULL
+    miss <- tibble::tibble(variable = names(miss), percent_missing = miss)
   }
 
   return(structure(miss, class = c("missingness", class(miss))))
@@ -66,8 +58,12 @@ missingness <- function(d,
 #' Plot missingness
 #'
 #' @param x Data frame from \code{\link{missingness}}
-#' @param filter_zero Remove variables with no missingness from the plot?
+#' @param remove_zeros Remove variables with no missingness from the plot?
 #'   Default = FALSE
+#' @param max_char Maximum length of variable names to leave untruncated.
+#'   Default = 40; use \code{Inf} to prevent truncation. Variable names longer
+#'   than this will be truncated to leave the beginning and end of each variable
+#'   name, bridged by " ... ".
 #' @param title Plot title
 #' @param font_size Relative size of all fonts in plot, default = 11
 #' @param point_size Size of dots, default = 3
@@ -82,7 +78,7 @@ missingness <- function(d,
 #' pima_diabetes %>%
 #'   missingness() %>%
 #'   plot()
-plot.missingness <- function(x, filter_zero = FALSE,
+plot.missingness <- function(x, remove_zeros = FALSE, max_char = 40,
                              title = NULL, font_size = 11, point_size = 3,
                              print = TRUE, ... ) {
 
@@ -93,22 +89,37 @@ plot.missingness <- function(x, filter_zero = FALSE,
        !is.data.frame(x))
     stop("x must be a data frame from missingness, or at least look like one!")
 
-  if (filter_zero)
+  if (remove_zeros)
     x <- dplyr::filter(x, percent_missing > 0)
+
+  x$variable <- trunc_char(x$variable, max_char)
+
   the_plot <-
     x %>%
     ggplot(aes(x = reorder(variable, percent_missing), y = percent_missing)) +
-    geom_point(size = point_size) +
+    geom_point(size = point_size, aes(color = percent_missing == 0)) +
     coord_flip() +
     scale_x_discrete(name = NULL) +
     scale_y_continuous(name = "Percent of Observations Missing",
-                       labels = function (x) paste0(x, "%")) +
+                       labels = function (x) paste0(x, "%"),
+                       limits = c(0, NA)) +
+    scale_color_manual(values = c("TRUE" = "darkgray", "FALSE" = "black"),
+                       guide = FALSE)
     ggtitle(title) +
     theme_gray(base_size = font_size)
 
   if (print)
     print(the_plot)
   return(invisible(the_plot))
+}
+
+#' @export
+print.missingness <- function(x, ...) {
+  if (is.data.frame(x)) {
+    NextMethod("print", x, n = Inf)
+  } else {
+    NextMethod("print", x)
+  }
 }
 
 #' @title

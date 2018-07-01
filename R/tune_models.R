@@ -3,9 +3,8 @@
 #'
 #' @param d A data frame
 #' @param outcome Name of the column to predict
-#' @param models Names of models to try, by default "rf" for random forest and
-#'   "knn" for k-nearest neighbors. See \code{\link{supported_models}} for
-#'   available models.
+#' @param models Names of models to try. See \code{\link{get_supported_models}}
+#'   for available models. Default is all available models.
 #' @param metric What metric to use to assess model performance? Options for
 #'   regression: "RMSE" (root-mean-squared error, default), "MAE" (mean-absolute
 #'   error), or "Rsquared." For classification: "ROC" (area under the receiver
@@ -17,7 +16,9 @@
 #'   variable (first alphabetically if the training data outcome was not already
 #'   a factor).
 #' @param n_folds How many folds to use in cross-validation? Default = 5.
-#' @param tune_depth How many hyperparameter combinations to try? Defualt = 10.
+#' @param tune_depth How many hyperparameter combinations to try? Default = 10.
+#'   Value is multiplied by 5 for regularized regression. Increasing this value
+#'   when tuning XGBoost models may be particularly useful for performance.
 #' @param hyperparameters Optional, a list of data frames containing
 #'   hyperparameter values to tune over. If NULL (default) a random,
 #'   \code{tune_depth}-deep search of the hyperparameter space will be
@@ -30,10 +31,13 @@
 #' @param model_class "regression" or "classification". If not provided, this
 #'   will be determined by the class of `outcome` with the determination
 #'   displayed in a message.
+#' @param model_name Quoted, name of the model. Defaults to the name of the
+#' outcome variable.
+#' @param allow_parallel Logical, defaults to FALSE. If TRUE and a parallel
+#'   backend is set up (e.g. with \code{doMC}) models with support for parallel
+#'   training will be trained across cores.
 #'
 #' @export
-#' @importFrom kknn kknn
-#' @importFrom ranger ranger
 #' @importFrom rlang quo_name
 #'
 #' @seealso For setting up model training: \code{\link{prep_data}},
@@ -46,7 +50,8 @@
 #'
 #'   For faster, but not-optimized model training: \code{\link{flash_models}}
 #'
-#'   To prepare data and tune models in a single step: \code{\link{machine_learn}}
+#'   To prepare data and tune models in a single step:
+#'   \code{\link{machine_learn}}
 #'
 #' @return A model_list object. You can call \code{plot}, \code{summary},
 #'   \code{evaluate}, or \code{predict} on a model_list.
@@ -63,7 +68,7 @@
 #' # Prepare data for tuning
 #' d <- prep_data(pima_diabetes, patient_id, outcome = diabetes)
 #'
-#' # Tune random forest and k-nearest neighbors classification models
+#' # Tune random forest, xgboost, and regularized regression classification models
 #' m <- tune_models(d, outcome = diabetes)
 #'
 #' # Get some info about the tuned models
@@ -99,12 +104,15 @@ tune_models <- function(d,
                         n_folds = 5,
                         tune_depth = 10,
                         hyperparameters = NULL,
-                        model_class) {
+                        model_class,
+                        model_name = NULL,
+                        allow_parallel = FALSE) {
 
   if (n_folds <= 1)
     stop("n_folds must be greater than 1.")
 
-  model_args <- setup_training(d, rlang::enquo(outcome), model_class, models, metric, positive_class)
+  model_args <- setup_training(d, rlang::enquo(outcome), model_class, models,
+                               metric, positive_class, n_folds)
   # Pull each item out of "model_args" list and assign in this environment
   for (arg in names(model_args))
     assign(arg, model_args[[arg]])
@@ -134,20 +142,21 @@ tune_models <- function(d,
     metric <- "AUC" # For caret internal function
 
   # Rough check for training that will take a while, message if so
-  n_mod <- n_folds * tune_depth * length(models)
-  obs <- nrow(d)
-  if ( (obs > 1000 && n_mod > 10) || (obs > 100 && n_mod > 100) )
-    message("You've chosen to tune ", n_mod, " models (n_folds = ", n_folds,
-            " x tune_depth = ", tune_depth, " x ", "length(models) = ",
-            length(models), ") on a ", format(obs, big.mark = ","), " row dataset. ",
-            "This may take a while...")
+  check_training_time(ddim = dim(d), n_folds = n_folds,
+                      hpdim = purrr::map_int(hyperparameters, nrow)) %>%
+    message()
 
-  train_list <- train_models(d, outcome, models, metric, train_control, hyperparameters, tuned)
+  train_list <- train_models(d, outcome, models, metric, train_control,
+                             hyperparameters, tuned, allow_parallel)
   train_list <- as.model_list(listed_models = train_list,
                               tuned = tuned,
                               target = rlang::quo_name(outcome),
                               recipe = recipe,
-                              positive_class = attr(train_list, "positive_class")) %>%
+                              positive_class = attr(train_list, "positive_class"),
+                              model_name = model_name,
+                              best_levels = best_levels,
+                              original_data_str = original_data_str,
+                              versions = attr(train_list, "versions")) %>%
     structure(timestamp = Sys.time())
   return(train_list)
 }

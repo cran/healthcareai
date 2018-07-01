@@ -10,6 +10,8 @@ Status](https://travis-ci.org/HealthCatalyst/healthcareai-r.svg?branch=master)](
 [![codecov
 badge](https://codecov.io/gh/HealthCatalyst/healthcareai-r/branch/master/graph/badge.svg)](https://codecov.io/gh/HealthCatalyst/healthcareai-r)
 [![CRAN\_Status\_Badge](https://www.r-pkg.org/badges/version-last-release/healthcareai)](https://cran.r-project.org/package=healthcareai)
+![CRAN downloads
+badge](https://cranlogs.r-pkg.org/badges/grand-total/healthcareai)
 [![License:
 MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/HealthCatalystSLC/healthcareai-r/blob/master/LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.999334.svg)](https://doi.org/10.5281/zenodo.999334)
@@ -21,10 +23,9 @@ easy as possible. It does that by providing functions to:
 
   - Develop customized, reliable, high-performance machine learning
     models with minimal code
-  - Easily make and evaluate predictions and push them to a database or
-    flat file
-  - Provide tools related to data cleaning, manipulation, imputation,
-    and visualization
+  - Easily make and evaluate predictions and push them to a database
+  - Make data cleaning, manipulation, imputation, and visualization as
+    simple as possible
 
 ## Usage
 
@@ -34,13 +35,14 @@ line of code:
 ``` r
 models <- machine_learn(pima_diabetes, patient_id, outcome = diabetes)
 models
-# > Algorithms Trained: Random Forest, k-Nearest Neighbors
+# > Algorithms Trained: Random Forest, eXtreme Gradient Boosting, and glmnet
+# > Model Name: diabetes
 # > Target: diabetes
 # > Class: Classification
 # > Performance Metric: AUROC
 # > Number of Observations: 768
 # > Number of Features: 12
-# > Models Trained: 2018-04-20 12:25:41 
+# > Models Trained: 2018-06-29 17:19:43 
 # > 
 # > Models tuned via 5-fold cross validation over 10 combinations of hyperparameter values.
 # > Best model: Random Forest
@@ -48,7 +50,7 @@ models
 # > Optimal hyperparameter values:
 # >   mtry = 2
 # >   splitrule = extratrees
-# >   min.node.size = 3
+# >   min.node.size = 6
 ```
 
 Make predictions and examine predictive performance:

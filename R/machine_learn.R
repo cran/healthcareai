@@ -7,8 +7,8 @@
 #'   unquoted.
 #' @param outcome Name of the target column, i.e. what you want to predict.
 #'   Unquoted. Must be named, i.e. you must specify \code{outcome = }
-#' @param models Models to be trained, k-nearest neighbors and random forest by
-#'   default. See \code{\link{supported_models}} for details.
+#' @param models Names of models to try. See \code{\link{get_supported_models}}
+#'   for available models. Default is all available models.
 #' @param tune If TRUE (default) models will be tuned via
 #'   \code{\link{tune_models}}. If FALSE, models will be trained via
 #'   \code{\link{flash_models}} which is substantially faster but produces
@@ -21,10 +21,16 @@
 #' @param n_folds How many folds to use to assess out-of-fold accuracy? Default
 #'   = 5. Models are evaluated on out-of-fold predictions whether tune is TRUE
 #'   or FALSE.
-#' @param tune_depth How many hyperparameter combinations to try? Defualt = 10.
-#'   Ignored if tune is FALSE.
+#' @param tune_depth How many hyperparameter combinations to try? Default = 10.
+#'   Value is multiplied by 5 for regularized regression. Ignored if tune is
+#'   FALSE.
 #' @param impute Logical, if TRUE (default) missing values will be filled by
 #'   \code{\link{hcai_impute}}
+#' @param model_name Quoted, name of the model. Defaults to the name of the
+#'   outcome variable.
+#' @param allow_parallel Logical, defaults to FALSE. If TRUE and a parallel
+#'   backend is set up (e.g. with \code{doMC}) models with support for parallel
+#'   training will be trained across cores.
 #'
 #' @return A model_list object. You can call \code{plot}, \code{summary},
 #'   \code{evaluate}, or \code{predict} on a model_list.
@@ -80,7 +86,8 @@
 #' machine_learn(d$train, patient_id, outcome = diabetes, tune = FALSE)
 #' }
 machine_learn <- function(d, ..., outcome, models, tune = TRUE, positive_class,
-                          n_folds = 5, tune_depth = 10, impute = TRUE) {
+                          n_folds = 5, tune_depth = 10, impute = TRUE,
+                          model_name = NULL, allow_parallel = FALSE) {
 
   if (!is.data.frame(d))
     stop("\"d\" must be a data frame.")
@@ -92,7 +99,7 @@ machine_learn <- function(d, ..., outcome, models, tune = TRUE, positive_class,
     if (length(not_there))
       stop("The following variable(s) were passed to the ... argument of machine_learn",
            " but are not the names of columns in the data frame: ",
-           paste(not_there, collapse = ", "))
+           list_variables(not_there))
   }
 
   outcome <- rlang::enquo(outcome)
@@ -115,10 +122,12 @@ machine_learn <- function(d, ..., outcome, models, tune = TRUE, positive_class,
     if (tune) {
       tune_models(pd, outcome = !!outcome, models = models,
                   positive_class = positive_class,
-                  n_folds = n_folds, tune_depth = tune_depth)
+                  n_folds = n_folds, tune_depth = tune_depth,
+                  model_name = model_name, allow_parallel = allow_parallel)
     } else {
       flash_models(pd, outcome = !!outcome, models = models,
-                   positive_class = positive_class, n_folds = n_folds)
+                   positive_class = positive_class, n_folds = n_folds,
+                   model_name = model_name, allow_parallel = allow_parallel)
     }
   return(m)
 }

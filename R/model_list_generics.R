@@ -9,7 +9,8 @@ print.model_list <- function(x, ...) {
     x <- change_metric_names(x)
     rinfo <- extract_model_info(x)
     out <- paste0(
-      "Algorithms Trained: ", paste(rinfo$algs, collapse = ", "),
+      "Algorithms Trained: ", list_variables(rinfo$algs),
+      "\nModel Name: ", rinfo$model_name,
       "\nTarget: ", rinfo$target,
       "\nClass: ", rinfo$m_class,
       "\nPerformance Metric: ", rinfo$metric,
@@ -99,7 +100,7 @@ summary.model_list <- function(object, ...) {
 #' @importFrom purrr map_df
 #' @export
 #' @examples
-#' models <- tune_models(mtcars, mpg, models = "knn", tune_depth = 5)
+#' models <- tune_models(mtcars, mpg, models = "glm")
 #' plot(models)
 plot.model_list <- function(x, font_size = 11, point_size = 1,
                             print = TRUE, ...) {
@@ -108,8 +109,8 @@ plot.model_list <- function(x, font_size = 11, point_size = 1,
   if (!inherits(x, "model_list"))
     stop("x is class ", class(x)[1], ", but needs to be model_list")
   if (!attr(x, "tuned"))
-    message("No tuning was done, so there's not much to plot. Use `tune_models` tune hyperparameters, ",
-            "or use `plot(predict(x))` to plot predictions on training data.")
+    message("Use `tune_models()` or `machine_learn(... , tune = TRUE)` to tune hyperparameters,",
+            " or use `predict(models) %>% plot()` to plot predictions on training data.")
   x <- change_metric_names(x)
   params <- purrr::map(x, ~ as.character(.x$modelInfo$parameters$parameter))
   bounds <- purrr::map_df(x, function(m) range(m$results[[m$metric]]))
@@ -140,6 +141,8 @@ plot.model_list <- function(x, font_size = 11, point_size = 1,
             xlab(NULL) +
             labs(title = .x) +
             theme_gray(base_size = font_size)
+          if (.x == "lambda" && mod$modelInfo$label == "glmnet")
+            p <- p + scale_x_log10()
           p <-
             if (.x != hps[length(hps)]) {
               p + theme(axis.title.x = element_blank(),
@@ -153,10 +156,11 @@ plot.model_list <- function(x, font_size = 11, point_size = 1,
       title <-
         cowplot::ggdraw() +
         cowplot::draw_label(mod$modelInfo$label, fontface = "bold")
-      plot_grid(title, cowplot::plot_grid(plotlist = plots, ncol = 1, align = "v"),
-                ncol = 1, rel_heights = c(0.1, 1.9))
+      ncols <- if (mod$modelInfo$label == "eXtreme Gradient Boosting") 2 else 1
+      cowplot::plot_grid(plotlist = plots, ncol = ncols, align = "v") %>%
+        plot_grid(title, ., ncol = 1, rel_heights = c(0.1, 1.9))
     })
-  gg <- cowplot::plot_grid(plotlist = gg_list)
+  gg <- cowplot::plot_grid(plotlist = gg_list, nrow = 1)
   if (print)
     print(gg)
   return(invisible(gg))
@@ -178,7 +182,9 @@ plot.model_list <- function(x, font_size = 11, point_size = 1,
     as.model_list(listed_models = .subset(x, i),
                   target = attrs$target,
                   tuned = attrs$tuned,
-                  positive_class = attrs$positive_class) %>%
+                  recipe = attrs$recipe,
+                  positive_class = attrs$positive_class,
+                  original_data_str = attrs$original_data_str) %>%
     structure(timestamp = attrs$timestamp)
   return(x)
 }
@@ -204,7 +210,11 @@ extract_model_info <- function(x) {
   best_model_tune <-
     x[[best_model]]$bestTune
   positive_class <- attr(x, "positive_class")
+  from_rds <- attr(x, "loaded_from_rds")
+  if (is.null(from_rds))
+    from_rds <- "trained_in_memory"
   list(
+    model_name = attr(x, "model_name"),
     m_class = m_class,
     algs = algs,
     target = target,
@@ -215,7 +225,8 @@ extract_model_info <- function(x) {
     best_model_tune = best_model_tune,
     ddim = ddim,
     tuned = attr(x, "tuned"),
-    timestamp = attr(x, "timestamp")
+    timestamp = attr(x, "timestamp"),
+    from_rds = from_rds
   )
 }
 
@@ -227,12 +238,16 @@ extract_model_info <- function(x) {
 #' @noRd
 format_tune <- function(best_tune) {
   best_tune %>%
-    purrr::map_chr(as.character) %>%
+    purrr::map(~ {
+      if (is.numeric(.x))
+        .x <- signif(.x, 2)
+      as.character(.x)
+    }) %>%
     paste(names(.), ., sep = " = ", collapse = "\n  ")
 }
 
 format_performance <- function(perf) {
-  round(perf, 2) %>%
+  signif(perf, 2) %>%
     paste(names(.), ., sep = " = ", collapse = ", ")
 }
 

@@ -16,22 +16,37 @@ Vector of currently-supported algorithms.
 \strong{Random Forest}: "rf". Regression and classification.
 Implemented via \code{ranger}.
 \itemize{
-  \item{mtry: Fraction of variables to consider for each split}
+  \item{mtry: Number of variables to consider for each split}
   \item{splitrule: Splitting rule. For classification either "gini" or
-  "extratrees". For regression either "variance", "extratrees", or
-  "maxstat".}
+  "extratrees". For regression either "variance" or "extratrees".}
   \item{min.node.size: Minimal node size.}
 }
 
-\strong{k-nearest neighbors}: "knn". Regression and classification.
-Implemented via \code{kknn}.
+\strong{XGBoost}: "xgb". eXtreme Gradient Boosting
+Implemented via \code{xgboost}. Note that XGB has many more hyperparameters
+than the other models. Because of this, it may require greater tune_depth
+to optimize performance.
 \itemize{
-  \item{kmax: Number of neighbors to consider.}
-  \item{distance: Minkowsky distance parameter, (0, Inf). 1 = Manhatten, 2 =
-  Euclidian, -> Inf = Chebyshev.}
-  \item{kernal: Kernal to use. Possible choices are "rectangular" (standard
-  knn), "triangular", "epanechnikov", "biweight", "triweight", "cos", "inv",
-  "gaussian", "rank", or "optimal".}
+  \item{eta: Control for learning rate, [0, 1]}
+  \item{gamma: Threshold for further cutting of leaves, [0, Inf].
+  Larger is more conservative.}
+  \item{max_depth: Maximum tree depth, [0, Inf]. Larger means more complex
+  models and so greater likelihood of overfitting. 0 produces no limit on depth.}
+  \item{subsample: Fraction of data to use in each training instance, (0, 1].}
+  \item{colsample_bytree: Fraction of features to use in each tree, (0, 1].}
+  \item{min_child_weight: Minimum sum of instance weight need to keep partitioning,
+  [0, Inf]. Larger values mean more conservative models.}
+  \item{nrounds: Number of rounds of boosting, [0, Inf). Larger values produce
+  a greater likelihood of overfitting.}
+}
+
+\strong{Regularized regression}: "glm". Regression and classification.
+Implemented via \code{glmnet}.
+\itemize{
+  \item{alpha: Elasticnet mixing parameter, in [0, 1]. 0 = ridge regression;
+  1 = lasso.}
+  \item{lambda: Regularization parameter, > 0. Larger values make for
+  stronger regularization.}
 }
 }
 \seealso{

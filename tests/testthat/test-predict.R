@@ -10,18 +10,17 @@ remove_logfiles()
 
 ### Setup. Data from caret.
 set.seed(2570)
-library(magrittr)
 data("swiss")
 swiss <-
   swiss %>%
   tibble::rownames_to_column("province") %>%
-  dplyr::mutate(Catholic = ifelse(Catholic > 80, "Y", "N")) %>%
+  dplyr::mutate(Catholic = ifelse(Catholic > 70, "Y", "N")) %>%
   tibble::as_tibble()
-part <- caret::createDataPartition(swiss$Catholic, .8)[[1]]
-training_data <- swiss[part, ]
-test_data <- swiss[-part, ]
+part <- split_train_test(swiss, Catholic, .8)
+training_data <- part$train
+test_data <- part$test
 test_data_newlevel <- test_data
-test_data_newlevel$Catholic[c(3, 7, 16)] <- "unobserved in training"
+test_data_newlevel$Catholic[sample(nrow(test_data), 3)] <- "unobserved in training"
 test_data_newlevel$Catholic[5] <- "another new level"
 test_data_new_missing <- test_data
 test_data_new_missing$Agriculture[1:3] <- NA
@@ -46,6 +45,7 @@ suppressWarnings({
   model_regression_not_prepped <-
     training_data %>%
     dplyr::select(-province) %>%
+    dplyr::mutate(Catholic = ifelse(Catholic == "Y", 1L, 0L)) %>%
     tune_models(Fertility)
 })
 # And prepped newdata to go with them
@@ -59,7 +59,8 @@ classification_prepped_prepped <-
   predict(model_classify_prepped, test_data_class_prep)
 
 regression_not_not <-
-  predict(model_regression_not_prepped, test_data)
+  dplyr::mutate(test_data, Catholic = ifelse(Catholic == "Y", 1L, 0L)) %>%
+  predict(model_regression_not_prepped, .)
 classification_not_not <-
   predict(model_classify_not_prepped, test_data)
 
@@ -209,18 +210,18 @@ test_that("printing classification df gets ROC/PR metric right", {
       tune_models(Catholic, models = "RF", metric = "PR", tune_depth = 2, n_folds = 2) %>%
       predict()
   })
-  expect_false(stringr::str_detect(capture_message(print(roc)), "PR"))
-  expect_false(stringr::str_detect(capture_message(print(pr)), "ROC"))
+  expect_false(stringr::str_detect(as.character(capture_message(print(roc))), "PR"))
+  expect_false(stringr::str_detect(as.character(capture_message(print(pr))), "ROC"))
 })
 
 test_that("determine_prep FALSE when no recipe on model", {
   determine_prep(model_regression_not_prepped, test_data) %>%
-  expect_false()
+    expect_false()
 })
 
 test_that("determine_prep FALSE when newdata has been prepped", {
   determine_prep(model_regression_prepped, test_data_reg_prep) %>%
-  expect_false()
+    expect_false()
 })
 
 test_that("determine_prep TRUE w/o warning when prep needed and vars changed in prep", {
@@ -250,12 +251,6 @@ test_that("ready_no_prep stops for missingness but not in outcome", {
                "missing")
 })
 
-test_that("ready_no_prep stops informatively for new factor levels", {
-  test_data$Catholic[1] <- "that's weird"
-  expect_error(ready_no_prep(model_regression_not_prepped[[1]]$trainingData, test_data),
-               "Catholic: that's weird")
-})
-
 test_that("ready_with_prep preps appropriately", {
   prepped <- ready_with_prep(model_regression_prepped, test_data)
   expect_s3_class(prepped, "data.frame")
@@ -282,26 +277,27 @@ test_that("ready_with_prep warns for new factor levels (via prep_data)", {
 
 test_that("predict handles positive class specified in training", {
   d <- tibble::tibble(y = rbinom(50, 1, .5),
-                      x1 = rnorm(50, mean = y, sd = .1),
-                      x2 = rnorm(50, mean = y, sd = .1))
+                      x1 = rnorm(50, mean = y, sd = 1),
+                      x2 = rnorm(50, mean = y, sd = 1))
+  d$x3 <- map_chr(d$y, ~ sample(c("a", "b"), 1, FALSE, if (.x) c(2, 1) else c(1, 2)))
   pd <- prep_data(d, outcome = y)
   # Default Y is positive
   preds <- list(
     tm_rf = pd %>% tune_models(y, tune_depth = 2, models = "rf") %>% predict(),
-    tm_knn = pd %>% tune_models(y, tune_depth = 2, models = "knn") %>% predict(),
+    tm_xgb = pd %>% tune_models(y, tune_depth = 2, models = "xgb") %>% predict(),
     ml = machine_learn(d, outcome = y, models = "rf", tune_depth = 2) %>% predict()
   )
   expect_true(all(map_lgl(preds, ~ {
-    mean(.x$predicted_y[.x$y == "Y"]) > mean(.x$predicted_y[.x$y == "N"])
+    mean(.x$predicted_y[.x$y == "Y"]) >= mean(.x$predicted_y[.x$y == "N"])
   })))
   # Set N as positive
   preds <- list(
     tm_rf = pd %>% tune_models(y, tune_depth = 2, models = "rf", positive_class = "N") %>% predict(),
-    tm_knn = pd %>% tune_models(y, tune_depth = 2, models = "knn", positive_class = "N") %>% predict(),
+    tm_xgb = pd %>% tune_models(y, tune_depth = 2, models = "xgb", positive_class = "N") %>% predict(),
     ml = machine_learn(d, outcome = y, models = "rf", tune_depth = 2, positive_class = "N") %>% predict()
   )
   expect_true(all(map_lgl(preds, ~ {
-    mean(.x$predicted_y[.x$y == "Y"]) < mean(.x$predicted_y[.x$y == "N"])
+    mean(.x$predicted_y[.x$y == "Y"]) <= mean(.x$predicted_y[.x$y == "N"])
   })))
 })
 
@@ -315,7 +311,7 @@ test_that("can predict on untuned classification model with new data", {
 
 test_that("predict without new data returns out of fold predictions from training", {
   preds <- predict(model_classify_prepped)$predicted_Catholic
-  oofpreds <- dplyr::arrange(model_classify_prepped$`Random Forest`$pred, rowIndex)$Y
+  oofpreds <- dplyr::arrange(model_classify_prepped[[extract_model_info(model_classify_prepped)$best_model_name]]$pred, rowIndex)$Y
   expect_true(all.equal(preds, oofpreds))
 })
 
@@ -331,18 +327,23 @@ test_that("logging works as expected", {
   expect_equal(length(list.files(pattern = "txt$")), 0L)
   # Activating default logs works
   predict(model_regression_prepped, test_data, write_log = TRUE)
-  expect_true(file.exists("prediction_log.txt"))
-  first_log <- readLines("prediction_log.txt")
+  expect_true(file.exists("Fertility_prediction_log.txt"))
+  first_log <- readLines("Fertility_prediction_log.txt")
   expect_true(any(stringr::str_detect(first_log, "Days since model trained")))
   # Appends same file
   predict(model_regression_prepped, test_data[1, ], write_log = TRUE)
   expect_equal(length(list.files(pattern = "txt$")), 1L)
-  second_log <- readLines("prediction_log.txt")
+  second_log <- readLines("Fertility_prediction_log.txt")
   expect_true(length(second_log) > length(first_log))
   # Custom file location
   fileloc <- tempfile(pattern = "temp-testfile-", tmpdir = ".", fileext = ".txt")
   predict(model_regression_prepped, test_data, write_log = fileloc)
   expect_true(file.exists(fileloc))
+})
+
+test_that("get_pred_summary seems to work", {
+  expect_true(tibble::is.tibble(get_pred_summary(classification_prepped_prepped)))
+  expect_equal(dim(get_pred_summary(classification_prepped_prepped)), c(1, 6))
 })
 
 remove_logfiles()

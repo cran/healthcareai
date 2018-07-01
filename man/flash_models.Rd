@@ -4,17 +4,16 @@
 \alias{flash_models}
 \title{Train models without tuning for performance}
 \usage{
-flash_models(d, outcome, models = c("rf", "knn"), metric, positive_class,
-  n_folds = 5, model_class)
+flash_models(d, outcome, models, metric, positive_class, n_folds = 5,
+  model_class, model_name = NULL, allow_parallel = FALSE)
 }
 \arguments{
 \item{d}{A data frame}
 
 \item{outcome}{Name of the column to predict}
 
-\item{models}{Names of models to try, by default "rf" for random forest and
-"knn" for k-nearest neighbors. See \code{\link{supported_models}} for
-available models.}
+\item{models}{Names of models to try. See \code{\link{get_supported_models}}
+for available models. Default is all available models.}
 
 \item{metric}{What metric to use to assess model performance? Options for
 regression: "RMSE" (root-mean-squared error, default), "MAE" (mean-absolute
@@ -35,6 +34,13 @@ it trains \code{n_folds} models to evaluate performance out of fold.}
 \item{model_class}{"regression" or "classification". If not provided, this
 will be determined by the class of `outcome` with the determination
 displayed in a message.}
+
+\item{model_name}{Quoted, name of the model. Defaults to the name of the
+outcome variable.}
+
+\item{allow_parallel}{Logical, defaults to FALSE. If TRUE and a parallel
+backend is set up (e.g. with \code{doMC}) models with support for parallel
+training will be trained across cores.}
 }
 \value{
 A model_list object. You can call \code{plot}, \code{summary},
@@ -84,5 +90,6 @@ For setting up model training: \code{\link{prep_data}},
 
   For optimizing performance: \code{\link{tune_models}}
 
-  To prepare data and tune models in a single step: \code{\link{machine_learn}}
+  To prepare data and tune models in a single step:
+  \code{\link{machine_learn}}
 }

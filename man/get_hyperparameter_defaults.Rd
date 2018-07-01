@@ -34,18 +34,24 @@ Get hyperparameter values
 }
 \details{
 Get hyperparameters for model training.
- \code{get_hyperparameter_defaults} returns a list of 1-row data frames with
- default hyperparameter values that are used by \code{flash_models}.
+ \code{get_hyperparameter_defaults} returns a list of 1-row data frames
+ (except for glm, which is a 10-row data frame) with default hyperparameter
+ values that are used by \code{flash_models}.
  \code{get_random_hyperparameters} returns a list of data frames with
  combinations of random values of hyperparameters to tune over in
  \code{tune_models}; the number of rows in the data frames is given by
  `tune_depth`.
 
- For \code{get_hyperparameter_defaults} k-NN defaults are from the kknn
- package: kmax = 7, distance = 2 (Minkowski's exponent, i.e. Euclidean
- distance), kernal = "optimal". Random forest defaults are from Intro to
+ For \code{get_hyperparameter_defaults}
+ XGBoost defaults are from caret and XGBoost documentation:
+ eta = 0.3, gamma = 0, max_depth = 6, subsample = 0.7,
+ colsample_bytree = 0.8, min_child_weight = 1, and nrounds = 50.
+ Random forest defaults are from Intro to
  Statistical Learning and caret: mtry = sqrt(k), splitrule = "extratrees",
- min.node.size = 1 for classification, 5 for regression
+ min.node.size = 1 for classification, 5 for regression.
+ glm defaults are
+ from caret: alpha = 1, and because glmnet fits sequences of lambda nearly as
+ fast as an individual value, lambda is a sequence from 1e-4 to 8.
 }
 \seealso{
 \code{\link{models}} for model and hyperparameter details

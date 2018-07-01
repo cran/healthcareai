@@ -5,7 +5,8 @@
 \title{Machine learning made easy}
 \usage{
 machine_learn(d, ..., outcome, models, tune = TRUE, positive_class,
-  n_folds = 5, tune_depth = 10, impute = TRUE)
+  n_folds = 5, tune_depth = 10, impute = TRUE, model_name = NULL,
+  allow_parallel = FALSE)
 }
 \arguments{
 \item{d}{A data frame}
@@ -16,8 +17,8 @@ unquoted.}
 \item{outcome}{Name of the target column, i.e. what you want to predict.
 Unquoted. Must be named, i.e. you must specify \code{outcome = }}
 
-\item{models}{Models to be trained, k-nearest neighbors and random forest by
-default. See \code{\link{supported_models}} for details.}
+\item{models}{Names of models to try. See \code{\link{get_supported_models}}
+for available models. Default is all available models.}
 
 \item{tune}{If TRUE (default) models will be tuned via
 \code{\link{tune_models}}. If FALSE, models will be trained via
@@ -34,11 +35,19 @@ a factor).}
 = 5. Models are evaluated on out-of-fold predictions whether tune is TRUE
 or FALSE.}
 
-\item{tune_depth}{How many hyperparameter combinations to try? Defualt = 10.
-Ignored if tune is FALSE.}
+\item{tune_depth}{How many hyperparameter combinations to try? Default = 10.
+Value is multiplied by 5 for regularized regression. Ignored if tune is
+FALSE.}
 
 \item{impute}{Logical, if TRUE (default) missing values will be filled by
 \code{\link{hcai_impute}}}
+
+\item{model_name}{Quoted, name of the model. Defaults to the name of the
+outcome variable.}
+
+\item{allow_parallel}{Logical, defaults to FALSE. If TRUE and a parallel
+backend is set up (e.g. with \code{doMC}) models with support for parallel
+training will be trained across cores.}
 }
 \value{
 A model_list object. You can call \code{plot}, \code{summary},

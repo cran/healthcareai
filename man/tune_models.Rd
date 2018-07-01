@@ -6,16 +6,16 @@
 performance}
 \usage{
 tune_models(d, outcome, models, metric, positive_class, n_folds = 5,
-  tune_depth = 10, hyperparameters = NULL, model_class)
+  tune_depth = 10, hyperparameters = NULL, model_class, model_name = NULL,
+  allow_parallel = FALSE)
 }
 \arguments{
 \item{d}{A data frame}
 
 \item{outcome}{Name of the column to predict}
 
-\item{models}{Names of models to try, by default "rf" for random forest and
-"knn" for k-nearest neighbors. See \code{\link{supported_models}} for
-available models.}
+\item{models}{Names of models to try. See \code{\link{get_supported_models}}
+for available models. Default is all available models.}
 
 \item{metric}{What metric to use to assess model performance? Options for
 regression: "RMSE" (root-mean-squared error, default), "MAE" (mean-absolute
@@ -31,7 +31,9 @@ a factor).}
 
 \item{n_folds}{How many folds to use in cross-validation? Default = 5.}
 
-\item{tune_depth}{How many hyperparameter combinations to try? Defualt = 10.}
+\item{tune_depth}{How many hyperparameter combinations to try? Default = 10.
+Value is multiplied by 5 for regularized regression. Increasing this value
+when tuning XGBoost models may be particularly useful for performance.}
 
 \item{hyperparameters}{Optional, a list of data frames containing
 hyperparameter values to tune over. If NULL (default) a random,
@@ -46,6 +48,13 @@ bare to this argument.}
 \item{model_class}{"regression" or "classification". If not provided, this
 will be determined by the class of `outcome` with the determination
 displayed in a message.}
+
+\item{model_name}{Quoted, name of the model. Defaults to the name of the
+outcome variable.}
+
+\item{allow_parallel}{Logical, defaults to FALSE. If TRUE and a parallel
+backend is set up (e.g. with \code{doMC}) models with support for parallel
+training will be trained across cores.}
 }
 \value{
 A model_list object. You can call \code{plot}, \code{summary},
@@ -69,7 +78,7 @@ Note that this function is training a lot of models (100 by default)
 # Prepare data for tuning
 d <- prep_data(pima_diabetes, patient_id, outcome = diabetes)
 
-# Tune random forest and k-nearest neighbors classification models
+# Tune random forest, xgboost, and regularized regression classification models
 m <- tune_models(d, outcome = diabetes)
 
 # Get some info about the tuned models
@@ -109,5 +118,6 @@ For setting up model training: \code{\link{prep_data}},
 
   For faster, but not-optimized model training: \code{\link{flash_models}}
 
-  To prepare data and tune models in a single step: \code{\link{machine_learn}}
+  To prepare data and tune models in a single step:
+  \code{\link{machine_learn}}
 }

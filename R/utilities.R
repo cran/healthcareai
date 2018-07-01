@@ -75,8 +75,7 @@ dfs_compatible <- function(training, predicting) {
 #' @noRd
 get_classes_sorted <- function(d) {
   classes <- purrr::map_lgl(d, is.numeric)
-  broom::tidy(classes) %>%
-    setNames(c("variable", "is_numeric")) %>%
+  tibble::tibble(variable = names(classes), is_numeric = classes) %>%
     dplyr::arrange(variable)
 }
 
@@ -100,15 +99,17 @@ change_metric_names <- function(object) {
   return(object)
 }
 
-#' Returns the order of performance of models in m, with 1 being best
+#' Returns the order of performance of models in m, ie the number in the first
+#' position is the index of the best model
 #' @noRd
-rank_models <- function(m) {
+order_models <- function(m) {
   mi <- extract_model_info(m)
   metric <-
     get_metric_names() %>%
     dplyr::filter(caret == mi$metric)
   perf <- do.call(rbind, purrr::map(names(m), ~ evaluate(m[.x])))
-  order(perf[, metric$ours], decreasing = m[[1]]$maximize)
+  out <- order(perf[, metric$ours], decreasing = m[[1]]$maximize)
+  setNames(out, names(m)[out])
 }
 
 #' Function to skip specific tests if they are not being run on Appveyor.
@@ -135,3 +136,19 @@ select_not <- function(d, var) {
 
 #' @export
 dplyr::`%>%`
+
+# Cut the middle out of string and replace with ...
+trunc_char <- function(x, max_char) {
+  if (max_char <= 5) {
+    warning(max_char, " characters isn't enough to bookend, so I'll give you ",
+            "the first ", max_char)
+    x <- stringr::str_sub(x, end = max_char)
+  }
+  to_trunc <- stringr::str_length(x) > max_char
+  if (any(to_trunc)) {
+    end_char <- ceiling(max_char / 2) - 2
+    x[to_trunc] <- paste0(stringr::str_sub(x, end = end_char), "...",
+                          stringr::str_sub(x, start = -end_char))[to_trunc]
+  }
+  return(x)
+}
