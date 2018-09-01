@@ -28,7 +28,8 @@ find_new_levels <- function(new, ref) {
     new <- get_factor_levels(new)
   if (is.data.frame(ref))
     ref <- get_factor_levels(ref)
-  lapply(names(ref), function(v) dplyr::setdiff(new[[v]], ref[[v]])) %>%
+  lapply(names(ref), function(v)
+    dplyr::setdiff(names(new[[v]]), names(ref[[v]]))) %>%
     setNames(names(ref))
 }
 
@@ -38,7 +39,7 @@ get_factor_levels <- function(d) {
   not_factors <- dplyr::union(names(d)[purrr::map_lgl(d, ~ is.numeric(.x))],
                               find_date_cols(d))
   d <- d[, !names(d) %in% not_factors, drop = FALSE]
-  lapply(d, function(x) as.character(unique(x)))
+  lapply(d, table, useNA = "ifany")
 }
 
 #' Take list of character vectors as from find_new_levels and format for
@@ -85,16 +86,20 @@ get_classes_sorted <- function(d) {
 #' @noRd
 change_metric_names <- function(object) {
   metrics <- get_metric_names()
-  if (is.model_list(object)) {
+  old_metric <- if (is.model_list(object)) object[[1]]$metric else attr(object, "model_info")$metric
+  # Only switch metrics if they're not already ours
+  if (!old_metric %in% metrics$ours) {
+    if (is.model_list(object)) {
       for (i in seq_along(object)) {
         switch_row <- which(metrics$caret == object[[i]]$metric)
         object[[i]]$metric <- metrics$ours[switch_row]
         names(object[[i]]$results)[names(object[[i]]$results) == metrics$caret[switch_row]] <-
           metrics$ours[switch_row]
       }
-  } else if (is.predicted_df(object)) {
-    attr(object, "model_info")$metric <-
-      metrics$ours[metrics$caret == attr(object, "model_info")$metric]
+    } else if (is.predicted_df(object)) {
+      attr(object, "model_info")$metric <-
+        metrics$ours[metrics$caret == old_metric]
+    }
   }
   return(object)
 }
@@ -120,10 +125,10 @@ order_models <- function(m) {
 #'
 #' @noRd
 skip_on_not_appveyor <- function() {
-    if (identical(Sys.getenv("APPVEYOR"), "True")) {
-        return()
-    }
-    testthat::skip("Not on Appveyor")
+  if (identical(Sys.getenv("APPVEYOR"), "True")) {
+    return()
+  }
+  testthat::skip("Not on Appveyor")
 }
 
 #' Whether var is quo or character returns d without it
@@ -151,4 +156,26 @@ trunc_char <- function(x, max_char) {
                           stringr::str_sub(x, start = -end_char))[to_trunc]
   }
   return(x)
+}
+
+#' Mode
+#'
+#' @param x Either a vector or a frequency table from \code{table}
+#'
+#' @return The modal value of x
+#' @export
+#'
+#' @examples
+#' x <- c(3, 1:5)
+#' Mode(x)
+#' Mode(table(x))
+Mode <- function(x) {
+  if (is.table(x)) {
+    x <- names(sort(x, decreasing = TRUE))[1]
+    suppressWarnings( if (!is.na(as.numeric(x))) x <- as.numeric(x) )
+    x
+  } else {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+  }
 }

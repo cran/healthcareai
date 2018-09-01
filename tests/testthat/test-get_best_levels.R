@@ -28,8 +28,14 @@ test_groups <- tibble::tibble(patient_id = rep("sam", 2), grouper = c("A", "new"
 test_added <- add_best_levels(test_row, test_groups, patient_id, grouper,
                               levels = attr(added, "best_levels"))
 models <- list(
-  fm = flash_models(dplyr::select(added, -patient_id), class_outcome, models = "xgb"),
-  tm = tune_models(dplyr::select(added, -patient_id), class_outcome, models = "rf", tune_depth = 2),
+  fm =
+    dplyr::select(added, -patient_id) %>%
+    prep_data(outcome = class_outcome, no_prep = TRUE) %>%
+    flash_models(class_outcome, models = "xgb"),
+  tm =
+    dplyr::select(added, -patient_id) %>%
+    prep_data(outcome = class_outcome, no_prep = TRUE) %>%
+    tune_models(class_outcome, models = "xgb", tune_depth = 2),
   ml = machine_learn(added, patient_id, outcome = reg_outcome, tune = FALSE, tune_depth = 2)
 )
 
@@ -177,12 +183,50 @@ test_that("add_best_levels can pull X_levels from base", {
 
 test_that("add_best_levels can pull X_levels from best_levels list", {
   test_added_list <- add_best_levels(test_row, test_groups, patient_id, grouper,
-                                     levels = attr(added, "best_levels"))
+                                    levels = attr(added, "best_levels"))
   expect_identical(test_added, test_added_list)
 })
 
+test_that("add_best_levels - add empty levels - logical", {
+  test_added_list <- add_best_levels(test_row, test_groups, patient_id, grouper,
+                                     levels = c("a", "b"))
+  test_none <-
+    tribble(
+      ~ patient_id, ~ x1, ~ grouper_a, ~ grouper_b,
+      "sam", 5, NA, NA
+    )
+  attr(test_none, "best_levels") <- list("grouper_levels" = c("a", "b"))
+  expect_identical(test_none, test_added_list)
+})
+
+test_that("add_best_levels - add empty levels - numeric", {
+  test_added_list <- add_best_levels(test_row, test_groups, patient_id, grouper,
+                                     levels = c("a", "b"), missing_fill = 0)
+  test_none <-
+    tribble(
+      ~ patient_id, ~ x1, ~ grouper_a, ~ grouper_b,
+      "sam", 5, 0, 0
+    )
+  attr(test_none, "best_levels") <- list("grouper_levels" = c("a", "b"))
+  expect_identical(test_none, test_added_list)
+})
+
+test_that("add_best_levels - add empty levels to best_levels attribute", {
+  test_added_list <- add_best_levels(test_row, test_groups, patient_id, grouper,
+                                     levels = c("A", "a"))
+  test_none <-
+    tibble(
+      patient_id = "sam",
+      x1 = 5,
+      grouper_A = as.integer(1),
+      grouper_a = as.integer(c(NA))
+    )
+  attr(test_none, "best_levels") <- list("grouper_levels" = c("A", "a"))
+  expect_identical(test_none, test_added_list)
+})
+
 test_that("model_lists get X_levels attributes from input data frame", {
-  purrr::map_lgl(models, ~ all.equal(attr(.x, "best_levels"), attr(added, "best_levels"))) %>%
+  purrr::map_lgl(models, ~ isTRUE(all.equal(attr(.x, "best_levels"), attr(added, "best_levels")))) %>%
     all() %>%
     expect_true()
 })
