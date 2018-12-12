@@ -1,7 +1,7 @@
 context("explore")
 
 ##### Setup
-set.seed(574)
+set.seed(400)
 m <- machine_learn(pima_diabetes[1:50, ], patient_id, outcome = diabetes,
                    tune = FALSE, n_folds = 2)
 multi <- machine_learn(na.omit(pima_diabetes[1:200, ]), patient_id, outcome = weight_class,
@@ -404,4 +404,11 @@ test_that("explore uses scaled features appropriately", {
 
 test_that("multiclass errors", {
   expect_error(explore(multi), "multiclass")
+})
+
+test_that("test removed data throws error", {
+  save_models(m)
+  reloaded_m <- load_models("models.RDS")
+  expect_error(explore(reloaded_m), "Explore requires that data is ")
+  file.remove("models.RDS")
 })

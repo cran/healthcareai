@@ -486,7 +486,7 @@ test_that("predict bakes 0/1 outcomes", {
     dplyr::slice(1:50) %>%
     mutate(diabetes = ifelse(diabetes == "Y", 1, 0)) %>%
     machine_learn(patient_id, outcome = diabetes, tune = FALSE, models = "glm")
-  expect_setequal(attr(m, "recipe")$template$diabetes, 0:1)
+  expect_setequal(attr(m, "recipe")$orig_data$diabetes, 0:1)
   p <- predict(m, outcome_groups = TRUE)
   expect_setequal(as.character(get_oof_predictions(m)$outcomes), c("N", "Y"))
   expect_setequal(as.character(p$diabetes), c("N", "Y"))
@@ -499,5 +499,58 @@ test_that("predict bakes 0/1 outcomes", {
   expect_setequal(as.character(pnew$diabetes), c("N", "Y"))
   expect_setequal(as.character(pnew$predicted_group), c("N", "Y"))
 })
+
+test_that("Predict relevels outcome", {
+  d <- split_train_test(pima_diabetes, outcome = diabetes)
+  m <- machine_learn(d$train, patient_id, outcome = diabetes, models = "glm",
+                     tune = FALSE)
+
+  predictions <- predict(m, newdata = d$test)
+  actual_levels <- levels(predictions$diabetes)
+  pos_class <- attr(m, "positive_class")
+  expect_equal(actual_levels[1], pos_class)
+})
+
+test_that("predict empty template/orig_data no error", {
+  attr(model_classify_prepped, "recipe")$template <- NULL
+  expect_error(predict(model_classify_prepped), NA)
+
+  attr(model_classify_prepped, "recipe")$orig_data <- NULL
+  expect_error(predict(model_classify_prepped), NA)
+})
+
+test_that("predict returns accurate has_training_data, and print.predicted_df", {
+  # True when normal
+  pred <- predict(model_classify_prepped)
+  expect_true(attr(pred, "model_info")$has_training_data)
+  capture_output(out <- capture_messages(print(pred)))
+  expect_false(stringr::str_detect(out, "Your model was sanitized of PHI"))
+
+  # True when only one orig or template
+  tmp <- attr(model_classify_prepped, "recipe")$orig_data
+  attr(model_classify_prepped, "recipe")$orig_data <- NULL
+  pred <- predict(model_classify_prepped)
+  expect_true(attr(pred, "model_info")$has_training_data)
+
+  attr(model_classify_prepped, "recipe")$orig_data <- tmp
+  attr(model_classify_prepped, "recipe")$template <- NULL
+  pred <- predict(model_classify_prepped)
+  expect_true(attr(pred, "model_info")$has_training_data)
+
+  # False when template is NULL, and no other data
+  attr(model_classify_prepped, "recipe")$orig_data <- NULL
+  attr(model_classify_prepped, "recipe")$tempate <- NULL
+  pred <- predict(model_classify_prepped)
+  expect_false(attr(pred, "model_info")$has_training_data)
+  capture_output(out <- capture_messages(print(pred)))
+  expect_true(stringr::str_detect(out, "Your model was sanitized of PHI"))
+
+  # True when template is NULL, and other data
+  pred <- predict(model_classify_prepped, training_data)
+  expect_true(attr(pred, "model_info")$has_training_data)
+  capture_output(out <- capture_messages(print(pred)))
+  expect_false(stringr::str_detect(out, "Your model was sanitized of PHI"))
+})
+
 
 remove_logfiles()

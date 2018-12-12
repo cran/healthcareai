@@ -13,11 +13,13 @@
 
 plot_regression_predictions(x, point_size = 1, point_alpha = 1, target)
 
-plot_classification_predictions(x, fill_colors = c("firebrick", "steelblue"),
-  fill_alpha = 0.7, curve_flex = 1, add_labels = TRUE, target)
+plot_classification_predictions(x, fill_colors = c("firebrick",
+  "steelblue"), fill_alpha = 0.7, curve_flex = 1, add_labels = TRUE,
+  target)
 
 plot_multiclass_predictions(x, conf_colors = c("black", "steelblue"),
-  text_color = "yellow", diag_color = "red", target)
+  text_color = "yellow", text_size = 3, text_angle = 60,
+  diag_color = "red", target)
 }
 \arguments{
 \item{x}{data frame as returned `predict.model_list`}
@@ -68,6 +70,13 @@ Default is c("black", "steelblue").}
 \item{text_color}{Character: color to write percent correct.
 Default is "yellow".}
 
+\item{text_size}{Numeric or logical: size of percent correct text. Defaults to
+3, a readable size. Greater than 20 classes might need smaller text. Text can be
+ turned off by setting to FALSE.}
+
+\item{text_angle}{Numeric or logical: angle to rotate x axis text. Defaults to
+60 degrees. Setting to FALSE will turn text horizontal.}
+
 \item{diag_color}{Character: color to highlight main diagonal. These are
 correct predictions. Default is "red".}
 }
@@ -89,7 +98,7 @@ predictions <- predict(models)
 plot(predictions)
 plot(predictions, caption = "Rsquared",
      title = "This model's predictions regress to the mean",
-     point_size = 3, point_alpha = .7, font_size = 14)
+     point_size = 3, point_alpha = .7, font_size = 9)
 p <- plot(predictions, print = FALSE)
 p + theme_classic()
 

@@ -6,9 +6,9 @@
 \usage{
 \method{plot}{explore_df}(x, n_use = 2, aggregate_fun = median,
   reorder_categories = TRUE, x_var, color_var, jitter_y = TRUE,
-  sig_fig = 3, font_size = 11, strip_font_size = 0.85, line_width = 0.5,
-  line_alpha = 0.7, rotate_x = FALSE, nrows = 1, title = NULL, caption,
-  print = TRUE, ...)
+  sig_fig = 3, font_size = 11, strip_font_size = 0.85,
+  line_width = 0.5, line_alpha = 0.7, rotate_x = FALSE, nrows = 1,
+  title = NULL, caption, print = TRUE, ...)
 }
 \arguments{
 \item{x}{A explore_df object from \code{\link{explore}}}
@@ -94,11 +94,12 @@ plot(counterfactuals)
 # `n_use`. You can also specify which of the varying features are mapped to the
 # x-axis and the color scale, and you can customize a variety of plot attributes
 plot(counterfactuals, n_use = 3, x_var = weight_class, color_var = age,
-    font_size = 16, strip_font_size = 1, line_width = 2, line_alpha = .5,
-    rotate_x = TRUE, nrows = NULL)
+    font_size = 9, strip_font_size = 1, line_width = 2, line_alpha = .5,
+    rotate_x = TRUE, nrows = 1)
 
 # And you can further modify the plot like any other ggplot object
-plot(counterfactuals, n_use = 1) +
+p <- plot(counterfactuals, n_use = 1, print = FALSE)
+p +
   ylab("predicted number of pregnancies") +
   theme_classic() +
   theme(aspect.ratio = 1,

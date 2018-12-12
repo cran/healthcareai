@@ -1,7 +1,7 @@
 context("model_list tests setup")
 
 # Setup ------------------------------------------------------------------------
-set.seed(257056)
+set.seed(25705)
 short <- dplyr::sample_n(na.omit(pima_diabetes), 50)
 dreg <- prep_data(short, outcome = pedigree)
 dcla <- prep_data(short, outcome = diabetes)
@@ -227,6 +227,28 @@ test_that("performance drops if the best model is pulled out of model_list", {
   original_rmse <- attr(r_models, "performance")[mi$metric]
   subsetted_rmse <- attr(r_models[not_best], "performance")[mi$metric]
   expect_true(original_rmse < subsetted_rmse)
+})
+
+test_that("extract_model_info has correct has_training_data item", {
+  mi <- extract_model_info(r_models)
+  expect_true(mi[["has_training_data"]])
+
+  # True if one
+  attr(r_models, "recipe")$template <- NULL
+  mi <- extract_model_info(r_models)
+  expect_true(mi[["has_training_data"]])
+
+  # True if one
+  attr(r_models, "recipe")$template <- attr(r_models, "recipe")$orig_data
+  attr(r_models, "recipe")$orig_data <- NULL
+  mi <- extract_model_info(r_models)
+  expect_true(mi[["has_training_data"]])
+
+  # False if none
+  attr(r_models, "recipe")$template <- NULL
+  attr(r_models, "recipe")$orig_data <- NULL
+  mi <- extract_model_info(r_models)
+  expect_false(mi[["has_training_data"]])
 })
 
 test_that("extraction from model list doesn't change model-trained timestamp", {

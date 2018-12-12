@@ -7,19 +7,23 @@
 #' @param recipe A recipe object. imputation will be added to the sequence of
 #'  operations for this recipe.
 #' @param numeric_method Defaults to \code{"mean"}. Other choices are
-#' \code{"bagimpute"} or \code{"knnimpute"}.
+#' \code{"bagimpute"}, \code{"knnimpute"} or \code{"locfimpute"}.
 #' @param nominal_method Defaults to \code{"new_category"}. Other choices are
-#' \code{"bagimpute"} or \code{"knnimpute"}.
-#' @param numeric_params A named list with parmeters to use with chosen
-#' imputation method on numeric data. Options are \code{bag_model} (bagimpute
-#' only), \code{bag_options} (bagimpute only), \code{knn_K}, (knnimpute only),
-#' \code{impute_with}, (bag or knn) or \code{seed_val} (bag or knn).
-#' See \link{step_bagimpute} or \link{step_knnimpute} for details.
-#' @param nominal_params A named list with parmeters to use with chosen
-#' imputation method on nominal data. Options are \code{bag_model} (bagimpute
-#' only), \code{bag_options} (bagimpute only), \code{knn_K}, (knnimpute only),
-#' \code{impute_with}, (bag or knn) or \code{seed_val} (bag or knn).
-#' See \link{step_bagimpute} or \link{step_knnimpute} for details.
+#' \code{"bagimpute"}, \code{"knnimpute"} or \code{"locfimpute"}.
+#' @param numeric_params A named list with parmeters to use with
+#'  chosen imputation method on numeric data. Options are
+#'  \code{bag_model} (bagimpute only), \code{bag_trees} (bagimpute
+#'  only), \code{bag_options} (bagimpute only), \code{bag_trees}
+#'  (bagimpute only), \code{knn_K} (knnimpute only), \code{impute_with}
+#'  (knnimpute only), (bag or knn) or \code{seed_val} (bag or knn).
+#'  See \link{step_bagimpute} or \link{step_knnimpute} for details.
+#' @param nominal_params A named list with parmeters to use with
+#'  chosen imputation method on nominal data. Options are
+#'  \code{bag_model} (bagimpute only), \code{bag_trees} (bagimpute
+#'  only), \code{bag_options} (bagimpute only), \code{bag_trees}
+#'  (bagimpute only), \code{knn_K} (knnimpute only), \code{impute_with}
+#'  (knnimpute only), (bag or knn) or \code{seed_val} (bag or knn).
+#'  See \link{step_bagimpute} or \link{step_knnimpute} for details.
 #' @return An updated version of `recipe` with the new step
 #'  added to the sequence of existing steps.
 #'
@@ -51,14 +55,14 @@
 #' trained_recipe <- prep(my_recipe, training = d)
 #'
 #' # Apply recipe
-#' data_modified <- bake(trained_recipe, newdata = d)
+#' data_modified <- bake(trained_recipe, new_data = d)
 #' missingness(data_modified)
 #'
 #'
 #' # Specify methods:
 #' my_recipe <- my_recipe %>%
 #'   hcai_impute(numeric_method = "bagimpute",
-#'     nominal_method = "new_category")
+#'     nominal_method = "locfimpute")
 #' my_recipe
 #'
 #' # Specify methods and params:
@@ -78,39 +82,40 @@ hcai_impute <- function(recipe,
   }
 
   # If methods dont exist, use defaults
-  if (!(numeric_method %in% c("mean", "bagimpute", "knnimpute"))) {
+  possible_numeric_methods <- c("mean", "bagimpute", "knnimpute", "locfimpute")
+  if (!(numeric_method %in% possible_numeric_methods)) {
     stop("non-supported numeric method. Use \"mean\", \"bagimpute\",
-         or \"knnimpute\"")
+         \"locfimpute\", or \"knnimpute\"")
   }
-  if (!(nominal_method %in% c("new_category", "bagimpute", "knnimpute"))) {
+  possible_nominal_methods <- c("new_category", "bagimpute", "knnimpute",
+                                "locfimpute")
+  if (!(nominal_method %in% possible_nominal_methods)) {
     stop("non-supported nominal method. Use \"new_category\", \"bagimpute\",
-         or \"knnimpute\"")
+         \"locfimpute\", or \"knnimpute\"")
   }
 
   # Assign defaults for params
   defaults <- list(
     bag_model = NULL,
-    bag_options = list(nbagg = 25, keepX = FALSE),
+    bag_options = list(keepX = FALSE),
     knn_K = 5,
+    bag_trees = 25,
     impute_with = imp_vars(all_predictors()),
     seed_val = sample.int(1000, 1)
   )
 
   # Fill in user-specified params
   num_p <- nom_p <- defaults
-  num_p[names(num_p) %in% names(numeric_params)] <- numeric_params
-  nom_p[names(nom_p) %in% names(nominal_params)] <- nominal_params
+  suppressWarnings( # Silence confusing warning when params don't match
+    num_p[names(num_p) %in% names(numeric_params)] <- numeric_params
+  )
+  suppressWarnings(
+    nom_p[names(nom_p) %in% names(nominal_params)] <- nominal_params
+  )
 
-  # Warn if extra bag names
-  available_param_names <- c("bag_model", "bag_options", "knn_K", "impute_with",
-                             "seed_val")
-  all_user_params <- names(c(numeric_params, nominal_params))
-  extras  <- all_user_params[!(all_user_params %in% available_param_names)]
-  if (length(extras > 0)) {
-    warning("You have extra imputation parameters that won't be used: ",
-            list_variables(extras),
-            ". Available params are: ", list_variables(available_param_names))
-  }
+  # Warn if params don't match chosen imputation method
+  check_params(possible_numeric_methods, numeric_method, numeric_params)
+  check_params(possible_nominal_methods, nominal_method, nominal_params)
 
   # Catch datasets where all predictors are of one type
   vi <- recipe$var_info
@@ -126,15 +131,26 @@ hcai_impute <- function(recipe,
         recipe,
         all_numeric(), - all_outcomes(),
         models = num_p$bag_model,
+        trees = num_p$bag_trees,
         options = num_p$bag_options,
         impute_with = num_p$impute_with,
         seed_val = num_p$seed_val)
     } else if (numeric_method == "knnimpute") {
+      if ("character" %in% map_chr(recipe$template, ~{
+        class(.x) %>% first()
+      }))
+        message("`knnimpute` depends on another library that does not support ",
+                "character columns yet. If `knnimpute` fails please convert ",
+                "all character columns to factors for knn imputation.")
       recipe <- step_knnimpute(
         recipe,
         all_numeric(), - all_outcomes(),
-        K = num_p$knn_K,
+        neighbors = num_p$knn_K,
         impute_with = num_p$impute_with)
+    } else if (numeric_method == "locfimpute") {
+      recipe <- step_locfimpute(
+        recipe,
+        all_numeric(), - all_outcomes())
     } else {
       stop("non-supported numeric method")
     }
@@ -145,22 +161,71 @@ hcai_impute <- function(recipe,
     if (nominal_method == "new_category") {
       recipe <- step_missing(recipe, all_nominal(), - all_outcomes())
     } else if (nominal_method == "bagimpute") {
+      if ("character" %in% map_chr(recipe$template, ~{
+        class(.x) %>% first()
+      }))
+        warning("`bagimpute` depends on another library that does not support",
+                " character columns yet. Check `bagimpute` by setting ",
+                "`collapse_rare_factors = FALSE`, and verify that missing ",
+                "values have been imputed with `missingness()`. If `bagimpute`",
+                " does not impute missing values, please convert all character",
+                " columns to factors.")
       recipe <- step_bagimpute(
         recipe,
         all_nominal(),
         models = nom_p$bag_model, - all_outcomes(),
+        trees = nom_p$bag_trees,
         options = nom_p$bag_options,
         impute_with = nom_p$impute_with,
         seed_val = nom_p$seed_val)
     }  else if (nominal_method == "knnimpute") {
+      if ("character" %in% map_chr(recipe$template, ~class(.x) %>% first()))
+        message("`knnimpute` depends on another library that does not support ",
+                "character columns yet. If `knnimpute` fails please convert ",
+                "all character columns to factors for knn imputation.")
       recipe <- step_knnimpute(
         recipe,
         all_nominal(), - all_outcomes(),
-        K = nom_p$knn_K,
+        neighbors = nom_p$knn_K,
         impute_with = nom_p$impute_with)
+    } else if (nominal_method == "locfimpute") {
+      recipe <- step_locfimpute(
+        recipe,
+        all_nominal(), - all_outcomes())
     } else {
       stop("non-supported nominal method")
     }
   }
   return(recipe)
+}
+
+
+#' Throws a warning if the parameters given don't match the supported parameters
+#' @noRd
+check_params <- function(possible_methods, cur_method, cur_params) {
+  available_params <- list(
+    knnimpute = c("knn_K", "impute_with", "seed_val"),
+    bagimpute = c("bag_model", "bag_trees", "bag_options", "impute_with",
+                  "seed_val"),
+    locfimpute = NULL,
+    mean = NULL,
+    new_category = NULL
+  )
+
+  purrr::map(possible_methods, ~{
+    if (cur_method == .x) {
+      matched_params <- names(cur_params) %in% available_params[[.x]]
+      new_params <- names(cur_params)[!matched_params]
+      if (length(new_params)) {
+        available_params_mes <-
+          if (is.null(available_params[[.x]]))
+            paste0("There are not available parameters for ", .x, ".")
+          else
+            paste0("Available ", .x, " params are: ",
+                   list_variables(available_params[[.x]]), ".")
+        warning("The following extra parameters won't be used for ", .x, ": ",
+                list_variables(new_params), ". ", available_params_mes)
+      }
+    }
+  })
 }

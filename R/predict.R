@@ -248,7 +248,7 @@ predict_model_list_main <- function(object,
   recipe <- attr(object, "recipe")
   if (missing(newdata)) {
     # Get prep-prep training data
-    newdata <- recipe$template
+    newdata <- recipe$orig_data
     # Use out-of-fold predictions from training
     oof_preds <- get_oof_predictions(object, mi)
     preds <- oof_preds$preds
@@ -267,12 +267,20 @@ predict_model_list_main <- function(object,
     if (is.classification_list(object))
       preds <- preds[[mi$positive_class]]
   }
+  if (!is.null(newdata))
+    mi[["has_training_data"]] <- TRUE
   pred_name <- paste0("predicted_", mi$target)
   newdata[[pred_name]] <- preds
   # Replace outcome as it came in with baked version, either from get_oof or
   # from ready_with_prep (or with NULL if newdata doesn't have it)
   newdata[[mi$target]] <- outcomes
   newdata <- tibble::as_tibble(newdata)
+
+  # Reorder factor levels if classification model and if outcomes exists
+  if (!is.regression_list(object) && !is.null(outcomes)) {
+    newdata[[mi$target]] <-
+      forcats::fct_relevel(newdata[[mi$target]], mi$positive_class)
+  }
 
   # Add groups if desired
   if (mi$m_class == "Multiclass") {
@@ -302,7 +310,8 @@ predict_model_list_main <- function(object,
          performance = mi$best_model_perf,
          timestamp = mi$timestamp,
          hyperparameters = structure(mi$best_model_tune,
-                                     "row.names" = "optimal:"))
+                                     "row.names" = "optimal:"),
+         has_training_data = mi$has_training_data)
 
   return(newdata)
 }
