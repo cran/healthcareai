@@ -299,7 +299,7 @@ test_that("dummy columns are created as expected", {
   n <- names(dplyr::select(d_clean, dplyr::starts_with("genre")))
   expect_true(all(exp %in% n))
   exp <- c("reaction_Dislike", "reaction_Huh", "reaction_Love",
-           "reaction_missing" )
+           "reaction_missing")
   n <- names(dplyr::select(d_clean, dplyr::starts_with("reaction")))
   expect_true(all(n == exp))
 })
@@ -360,9 +360,9 @@ test_that("prep_data applies recipe from training on test data", {
   expect_equal(unique(d_reprep$weirdness[is.na(d_test$weirdness)]),
                mean(d_train$weirdness, na.rm = TRUE))
   # When missing is the reference level
-  expect_true(all(d_reprep$genre_Country[is.na(d_test$genre)] == 0 &&
-                    d_reprep$genre_Rock[is.na(d_test$genre)] == 0 &&
-                    d_reprep$genre_Jazz[is.na(d_test$genre)] == 0))
+  expect_equal(sum(d_reprep$genre_Country[is.na(d_test$genre)]), 0)
+  expect_equal(sum(d_reprep$genre_Rock[is.na(d_test$genre)]), 0)
+  expect_equal(sum(d_reprep$genre_Jazz[is.na(d_test$genre)]), 0)
 })
 
 test_that("Unignored variables present in training but not deployment error if needed", {
@@ -370,7 +370,8 @@ test_that("Unignored variables present in training but not deployment error if n
     expect_warning(
       prep_data(dplyr::select(d_test, -length), recipe = d_prep)
     ),
-    "length")
+    "length"
+  )
   expect_s3_class(prep_data(dplyr::select(d_test, -song_id), recipe = d_prep),
                   "prepped_df")
 })

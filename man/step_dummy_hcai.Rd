@@ -5,9 +5,16 @@
 \alias{tidy.step_dummy_hcai}
 \title{Dummy Variables Creation}
 \usage{
-step_dummy_hcai(recipe, ..., role = "predictor", trained = FALSE,
-  naming = dummy_names, levels = NULL, skip = FALSE,
-  id = rand_id("bagimpute"))
+step_dummy_hcai(
+  recipe,
+  ...,
+  role = "predictor",
+  trained = FALSE,
+  naming = dummy_names,
+  levels = NULL,
+  skip = FALSE,
+  id = rand_id("bagimpute")
+)
 
 \method{tidy}{step_dummy_hcai}(x, ...)
 }
@@ -40,8 +47,8 @@ not provided for a nominal variable, the mode value will be used as the
 reference level.}
 
 \item{skip}{A logical. Should the step be skipped when the
-recipe is baked by \code{\link[=bake.recipe]{bake.recipe()}}? While all operations are baked
-when \code{\link[=prep.recipe]{prep.recipe()}} is run, some operations may not be able to be
+recipe is baked by \code{\link[recipes:bake.recipe]{bake.recipe()}}? While all operations are baked
+when \code{\link[recipes:prep.recipe]{prep.recipe()}} is run, some operations may not be able to be
 conducted on new data (e.g. processing the outcome variable(s)).
 Care should be taken when using \code{skip = TRUE} as it may affect
 the computations for subsequent operations}
@@ -123,6 +130,4 @@ rec <- rec \%>\% healthcareai:::step_dummy_hcai(weight_class,
  [step_ordinalscore()], [step_unorder()], [step_other()]
  [step_novel()]
 }
-\concept{preprocessing dummy_variables model_specification
- dummy_variables variable_encodings}
 \keyword{datagen}
