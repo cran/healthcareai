@@ -112,7 +112,7 @@ plot.missingness <- function(x, remove_zeros = FALSE, max_char = 40,
                        labels = function(x) paste0(x, "%"),
                        limits = c(0, NA)) +
     scale_color_manual(values = c("TRUE" = "darkgray", "FALSE" = "black"),
-                       guide = FALSE)
+                       guide = "none")
     ggtitle(title) +
     theme_gray(base_size = font_size)
 
@@ -128,19 +128,6 @@ print.missingness <- function(x, ...) {
   } else {
     NextMethod("print", x)
   }
-}
-
-#' @title
-#' Function to find proportion of NAs in each column of a dataframe or matrix
-#'
-#' @description DEPRICATED. Use \code{\link{missingness}} instead.
-#' @param x A data frame or matrix
-#' @param userNAs A vector of user defined NA values.
-#' @export
-countMissingData <- function(x, userNAs = NULL) {
-
-  .Deprecated("missingness", "healthcareai")
-  missingness(x)
 }
 
 #' Summarizes data given by \code{\link{missingness}}

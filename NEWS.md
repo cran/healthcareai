@@ -1,3 +1,8 @@
+# healthcareai 2.5.1
+
+#### Fixed
+- Numerous bugs with recipes and other updated packages.
+
 # healthcareai 2.5.0
 
 #### Breaking changes 
@@ -95,7 +100,7 @@ A whole new architecture featuring a simpler API, more rigor under the hood, and
 # healthcareai 1.2.0
 
 #### Added
-- *Limone* -- a [lime](https://www.oreilly.com/learning/introduction-to-local-interpretable-model-agnostic-explanations-lime)-like model interpretation tool.
+- *Limone* -- a [lime](https://www.oreilly.com/content/introduction-to-local-interpretable-model-agnostic-explanations-lime/)-like model interpretation tool.
     - Called via `getProcessVariablesDf`
     - See examples at the end of the help files for `RandomForestDeployment` and `LassoDeployment` for usage details
 
